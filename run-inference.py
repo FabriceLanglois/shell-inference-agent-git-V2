@@ -1,237 +1,256 @@
-#!/usr/bin/env python3
-
-import argparse
+import requests
 import json
-import logging
-import os
-import signal
 import sys
 import time
-from logging.handlers import RotatingFileHandler
-import threading
-
-import requests
 import torch
+import argparse
+import os
+import logging
+import subprocess
 
-# Configuration des logs avec rotation des fichiers
-log_directory = "logs"
-os.makedirs(log_directory, exist_ok=True)
-
-# Créer le logger
-logger = logging.getLogger("inference")
-logger.setLevel(logging.INFO)
-
-# Handler pour les fichiers avec rotation (5 fichiers de 2MB max)
-file_handler = RotatingFileHandler(
-    os.path.join(log_directory, "inference.log"),
-    maxBytes=2*1024*1024,
-    backupCount=5
+# Configuration des logs
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("inference.log"),
+        logging.StreamHandler()
+    ]
 )
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger = logging.getLogger(__name__)
 
-# Handler pour la console
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+# Constantes pour la connexion à Ollama
+OLLAMA_API_BASE = "http://localhost:11434/api"
+REQUEST_TIMEOUT = 10  # Augmenté de 2 à 10 secondes
+MAX_RETRY_ATTEMPTS = 5  # Augmenté de 3 à 5 tentatives
 
-# Ajout des handlers au logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
-
-# Configuration
-OLLAMA_API_HOST = os.environ.get("OLLAMA_API_HOST", "localhost")
-OLLAMA_API_PORT = os.environ.get("OLLAMA_API_PORT", "11434")
-OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
-CONFIG_FILE = "ollama_config.json"
-TIMEOUT = 120  # 2 minutes par défaut
-
-# Classe pour la gestion du timeout
-class TimeoutError(Exception):
-    pass
-
-def timeout_handler(signum, frame):
-    """Gestionnaire pour le signal de timeout"""
-    raise TimeoutError("L'inférence a dépassé le délai d'exécution")
-
-class OllamaClient:
-    """Client pour interagir avec l'API Ollama"""
-    
-    @staticmethod
-    def ensure_ollama_running():
-        """S'assure qu'Ollama est en cours d'exécution"""
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=2)
-                if response.status_code == 200:
-                    logger.debug("Ollama est en cours d'exécution")
-                    return True
-                
-                logger.info(f"Tentative {attempt+1}/{max_attempts}: Ollama répond mais avec le code {response.status_code}")
-            except requests.exceptions.ConnectionError:
-                logger.info(f"Tentative {attempt+1}/{max_attempts}: Ollama ne répond pas, essai de démarrage...")
-                try:
-                    # Utilisation de popen pour éviter de bloquer
-                    import subprocess
-                    subprocess.Popen(
-                        ["ollama", "serve"], 
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        start_new_session=True
-                    )
-                    # Attendre que le service démarre
-                    logger.info("Service Ollama démarré, attente de 3 secondes...")
-                    time.sleep(3)  # Attendre 3 secondes
-                except Exception as e:
-                    logger.error(f"Erreur lors du démarrage d'Ollama: {e}")
-        
-        logger.error("ERREUR: Impossible de démarrer ou de se connecter à Ollama après plusieurs tentatives")
-        logger.error("Assurez-vous qu'Ollama est installé et peut être démarré manuellement")
-        return False
-    
-    @staticmethod
-    def get_models():
-        """Récupère la liste des modèles disponibles"""
+def ensure_ollama_running():
+    """S'assure qu'Ollama est en cours d'exécution avec une logique améliorée"""
+    for attempt in range(MAX_RETRY_ATTEMPTS):
         try:
-            response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=5)
+            response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
-                return response.json().get("models", [])
-            else:
-                logger.error(f"Erreur lors de la récupération des modèles: {response.status_code}")
-                return []
-        except Exception as e:
-            logger.error(f"Exception lors de la récupération des modèles: {e}")
-            return []
-    
-    @staticmethod
-    def run_inference(prompt, model, temperature=0.7, max_tokens=500, stream=False):
-        """
-        Exécute une inférence en utilisant l'API Ollama
-        
-        Args:
-            prompt (str): Le prompt à envoyer au modèle
-            model (str): Le nom du modèle à utiliser
-            temperature (float): Température pour la génération (0-1)
-            max_tokens (int): Nombre maximum de tokens à générer
-            stream (bool): Si True, utilise le mode streaming
-
-        Returns:
-            str: Le texte généré ou un message d'erreur
-        """
-        if not OllamaClient.ensure_ollama_running():
-            error_msg = "Erreur: Ollama n'est pas disponible. Vérifiez l'installation et le service."
-            logger.error(error_msg)
-            return error_msg
-        
-        logger.info(f"Exécution de l'inférence avec le prompt: {prompt[:50]}...")
-        logger.info(f"Modèle sélectionné: {model}")
-        
-        # Vérifier si CUDA est disponible (pour information seulement)
-        if torch.cuda.is_available():
-            device = "cuda"
-            device_name = torch.cuda.get_device_name(0)
-            logger.info(f"GPU détecté: {device_name}")
-            print(f"GPU détecté: {device_name}")
-        else:
-            device = "cpu"
-            logger.info("Aucun GPU détecté, utilisation du CPU")
-            print("Aucun GPU détecté, utilisation du CPU")
-        
-        # Configuration de la requête à Ollama
-        url = f"{OLLAMA_API_BASE}/generate"
-        headers = {"Content-Type": "application/json"}
-        data = {
-            "model": model,
-            "prompt": prompt,
-            "stream": stream,
-            "options": {
-                "temperature": float(temperature),
-                "max_tokens": int(max_tokens),
-                "top_p": 0.9,
-                "seed": 42  # Pour des résultats plus cohérents
-            }
-        }
-        
-        print(f"Chargement du modèle {model}...")
-        start_time = time.time()
-        
-        try:
-            if stream:
-                return OllamaClient._run_inference_stream(url, headers, data, start_time)
-            else:
-                return OllamaClient._run_inference_basic(url, headers, data, start_time)
-        except TimeoutError:
-            error_msg = f"Erreur: L'inférence a dépassé le délai d'exécution ({TIMEOUT} secondes)"
-            logger.error(error_msg)
-            print(error_msg)
-            return error_msg
+                return True
+            
+            logger.info(f"Tentative {attempt+1}/{MAX_RETRY_ATTEMPTS}: Ollama répond mais avec le code {response.status_code}")
         except requests.exceptions.ConnectionError:
-            error_msg = f"Erreur: Impossible de se connecter à Ollama. Vérifiez qu'Ollama est bien lancé sur {OLLAMA_API_HOST}:{OLLAMA_API_PORT}"
-            logger.error(error_msg)
-            print(error_msg)
-            return error_msg
+            logger.info(f"Tentative {attempt+1}/{MAX_RETRY_ATTEMPTS}: Ollama ne répond pas, essai de démarrage...")
+            try:
+                # Vérifier si ollama est déjà en cours d'exécution
+                try:
+                    result = subprocess.run(["pgrep", "-f", "ollama serve"], 
+                                          shell=True, 
+                                          capture_output=True, 
+                                          text=True)
+                    if result.stdout.strip():
+                        logger.info("Un processus Ollama semble déjà en cours d'exécution mais ne répond pas.")
+                except Exception:
+                    pass  # Ignorer les erreurs de cette vérification
+                
+                # Utilisation de popen pour éviter de bloquer
+                subprocess.Popen(
+                    ["ollama", "serve"], 
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+                # Attendre que le service démarre
+                logger.info("Service Ollama démarré, attente de 5 secondes...")
+                time.sleep(5)  # Attendre 5 secondes au lieu de 3
+            except Exception as e:
+                logger.error(f"Erreur lors du démarrage d'Ollama: {e}")
+        except requests.exceptions.Timeout:
+            logger.info(f"Tentative {attempt+1}/{MAX_RETRY_ATTEMPTS}: Timeout lors de la connexion à Ollama")
         except Exception as e:
-            error_msg = f"Erreur lors de l'inférence: {str(e)}"
-            logger.error(error_msg)
-            print(error_msg)
-            return error_msg
-    
-    @staticmethod
-    def _run_inference_basic(url, headers, data, start_time):
-        """Version non-streaming de l'inférence"""
-        # Configurer le timeout
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(TIMEOUT)
+            logger.error(f"Erreur inattendue: {e}")
         
+        # Si ce n'est pas la dernière tentative, attendre avant de réessayer
+        if attempt < MAX_RETRY_ATTEMPTS - 1:
+            wait_time = 2 * (attempt + 1)  # Attente exponentielle
+            logger.info(f"Attente de {wait_time} secondes avant la prochaine tentative...")
+            time.sleep(wait_time)
+    
+    # Toutes les tentatives ont échoué
+    logger.error("ERREUR: Impossible de démarrer ou de se connecter à Ollama après plusieurs tentatives")
+    logger.error("Assurez-vous qu'Ollama est installé et peut être démarré manuellement avec 'ollama serve'")
+    
+    # Vérifier si ollama est installé
+    try:
+        which_result = subprocess.run(["which", "ollama"], capture_output=True, text=True)
+        if which_result.returncode != 0:
+            logger.error("Ollama n'est pas installé ou n'est pas dans le PATH")
+            logger.error("Installez Ollama via https://ollama.com/download")
+        else:
+            logger.info(f"Ollama est installé à: {which_result.stdout.strip()}")
+            logger.error("Le service ne répond pas malgré l'installation")
+    except Exception:
+        logger.error("Impossible de vérifier si Ollama est installé")
+    
+    return False
+
+def check_available_models():
+    """Vérifie les modèles disponibles et suggère des actions si aucun n'est trouvé"""
+    try:
+        response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=REQUEST_TIMEOUT)
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            if not models:
+                logger.warning("Aucun modèle disponible localement.")
+                print("Aucun modèle n'est installé. Vous pouvez en télécharger un avec:")
+                print("ollama pull llama3")
+                return False
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification des modèles: {e}")
+        return False
+
+def run_inference(prompt, model="llama3", max_length=500, temperature=0.7):
+    """
+    Exécute une inférence en utilisant Ollama avec gestion améliorée des erreurs
+    """
+    if not ensure_ollama_running():
+        error_msg = "Erreur: Ollama n'est pas disponible. Vérifiez l'installation et le service."
+        logger.error(error_msg)
+        print("\033[1;31m" + error_msg + "\033[0m")  # Rouge
+        print("Pour démarrer Ollama manuellement, exécutez: ollama serve")
+        return error_msg
+    
+    # Vérifier si des modèles sont disponibles
+    if not check_available_models():
+        return "Erreur: Aucun modèle n'est disponible. Téléchargez-en un avec 'ollama pull llama3'."
+    
+    print(f"Exécution de l'inférence avec le prompt: {prompt}")
+    print(f"\033[1;36mModèle sélectionné: {model}\033[0m")
+    
+    # Vérifier si CUDA est disponible (pour affichage seulement)
+    if torch.cuda.is_available():
+        device = "cuda"
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"GPU détecté: {gpu_name}")
+        print(f"CUDA version: {torch.version.cuda}")
+    else:
+        device = "cpu"
+        print("Aucun GPU détecté, utilisation du CPU")
+    
+    # Configuration de la requête à Ollama
+    url = f"{OLLAMA_API_BASE}/generate"
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": float(temperature),
+            "max_tokens": int(max_length),
+            "top_p": 0.9,
+            "seed": 42  # Pour des résultats plus cohérents
+        }
+    }
+    
+    print(f"Chargement du modèle {model}...")
+    start_time = time.time()
+    
+    # Tentatives de connexion avec retry
+    for attempt in range(3):
         try:
-            # Mode non-streaming
-            response = requests.post(url, headers=headers, json=data, timeout=TIMEOUT)
+            # Mode non-streaming (plus simple pour l'intégration)
+            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=REQUEST_TIMEOUT * 2)
             response.raise_for_status()  # Gérer les erreurs HTTP
             result = response.json()
-            
-            # Désactiver le timeout
-            signal.alarm(0)
             
             # Extraire le texte généré
             generated_text = result.get("response", "")
             
             inference_time = time.time() - start_time
-            logger.info(f"Inférence terminée en {inference_time:.2f} secondes")
             print(f"\nInférence terminée en {inference_time:.2f} secondes")
             
-            if torch.cuda.is_available():
-                memory_usage = torch.cuda.memory_allocated() / 1024**2
-                logger.info(f"Utilisation mémoire GPU: {memory_usage:.2f} MB")
-                print(f"Utilisation mémoire GPU: {memory_usage:.2f} MB")
+            if device == "cuda":
+                print(f"Utilisation mémoire GPU: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+            
+            print("\nTexte généré:")
+            print(generated_text)
             
             return generated_text
-        finally:
-            # S'assurer que le timeout est désactivé
-            signal.alarm(0)
-    
-    @staticmethod
-    def _run_inference_stream(url, headers, data, start_time):
-        """Version streaming de l'inférence"""
-        # Pour le streaming, nous utilisons un thread séparé pour surveiller le timeout
-        cancel_event = threading.Event()
-        timeout_thread = threading.Timer(
-            TIMEOUT, 
-            lambda: (cancel_event.set(), logger.error(f"Timeout après {TIMEOUT} secondes"))
-        )
-        timeout_thread.daemon = True
-        timeout_thread.start()
         
+        except requests.exceptions.ConnectionError:
+            if attempt < 2:  # Si ce n'est pas la dernière tentative
+                wait_time = 2 * (attempt + 1)
+                print(f"Erreur de connexion, nouvelle tentative dans {wait_time} secondes...")
+                time.sleep(wait_time)
+            else:
+                error_text = "Erreur: Impossible de se connecter à Ollama. Vérifiez qu'Ollama est bien lancé sur http://localhost:11434"
+                logger.error(error_text)
+                print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+                print("Pour démarrer Ollama, exécutez: ollama serve")
+                return error_text
+        
+        except requests.exceptions.Timeout:
+            logger.warning(f"Timeout lors de la requête (tentative {attempt+1}/3)")
+            if attempt < 2:
+                wait_time = 2 * (attempt + 1)
+                print(f"La requête prend plus de temps que prévu, nouvelle tentative dans {wait_time} secondes...")
+                time.sleep(wait_time)
+            else:
+                error_text = "Erreur: Timeout lors de l'inférence. Le modèle pourrait être trop grand pour votre machine."
+                logger.error(error_text)
+                print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+                return error_text
+        
+        except Exception as e:
+            error_text = f"Erreur lors de l'inférence: {str(e)}"
+            logger.error(error_text)
+            print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+            return error_text
+
+def run_inference_stream(prompt, model="llama3", max_length=500, temperature=0.7):
+    """
+    Version alternative utilisant le streaming pour afficher les tokens en temps réel
+    avec gestion améliorée des erreurs
+    """
+    if not ensure_ollama_running():
+        error_msg = "Erreur: Ollama n'est pas disponible. Vérifiez l'installation et le service."
+        logger.error(error_msg)
+        print("\033[1;31m" + error_msg + "\033[0m")  # Rouge
+        print("Pour démarrer Ollama manuellement, exécutez: ollama serve")
+        return error_msg
+    
+    # Vérifier si des modèles sont disponibles
+    if not check_available_models():
+        return "Erreur: Aucun modèle n'est disponible. Téléchargez-en un avec 'ollama pull llama3'."
+    
+    print(f"Exécution de l'inférence (streaming) avec le prompt: {prompt}")
+    print(f"\033[1;36mModèle sélectionné: {model}\033[0m")
+    
+    # Configuration similaire mais avec stream=True
+    url = f"{OLLAMA_API_BASE}/generate"
+    headers = {"Content-Type": "application/json"}
+    data = {
+        "model": model,
+        "prompt": prompt,
+        "stream": True,
+        "options": {
+            "temperature": float(temperature),
+            "max_tokens": int(max_length),
+            "top_p": 0.9,
+            "seed": 42  # Pour des résultats plus cohérents
+        }
+    }
+    
+    print(f"Chargement du modèle {model}...")
+    start_time = time.time()
+    generated_text = ""
+    
+    # Tentatives de connexion avec retry
+    for attempt in range(3):
         try:
             # Mode streaming
-            response = requests.post(url, headers=headers, json=data, stream=True)
+            response = requests.post(url, headers=headers, data=json.dumps(data), stream=True, timeout=REQUEST_TIMEOUT * 2)
             response.raise_for_status()
             
-            generated_text = ""
             token_count = 0
             
             for line in response.iter_lines():
-                if cancel_event.is_set():
-                    raise TimeoutError(f"L'inférence a dépassé le délai d'exécution ({TIMEOUT} secondes)")
-                
                 if line:
                     chunk = json.loads(line)
                     token = chunk.get("response", "")
@@ -241,241 +260,185 @@ class OllamaClient:
                     token_count += 1
                     if token_count % 5 == 0:  # Afficher tous les 5 tokens pour ne pas surcharger
                         print(f"Génération du token {token_count}...", end="\r")
-                
-                # Vérifier si c'est la fin de la génération
-                if chunk.get("done", False):
-                    break
-            
-            # Annuler le timeout
-            timeout_thread.cancel()
             
             inference_time = time.time() - start_time
-            logger.info(f"Inférence terminée en {inference_time:.2f} secondes")
             print(f"\nInférence terminée en {inference_time:.2f} secondes")
             
+            # Vérifier si CUDA est disponible pour afficher l'utilisation mémoire
             if torch.cuda.is_available():
-                memory_usage = torch.cuda.memory_allocated() / 1024**2
-                logger.info(f"Utilisation mémoire GPU: {memory_usage:.2f} MB")
-                print(f"Utilisation mémoire GPU: {memory_usage:.2f} MB")
+                print(f"Utilisation mémoire GPU: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+            
+            print("\nTexte généré:")
+            print(generated_text)
             
             return generated_text
+        
+        except requests.exceptions.ConnectionError:
+            if attempt < 2:  # Si ce n'est pas la dernière tentative
+                wait_time = 2 * (attempt + 1)
+                print(f"Erreur de connexion, nouvelle tentative dans {wait_time} secondes...")
+                time.sleep(wait_time)
+            else:
+                error_text = "Erreur: Impossible de se connecter à Ollama. Vérifiez qu'Ollama est bien lancé sur http://localhost:11434"
+                logger.error(error_text)
+                print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+                print("Pour démarrer Ollama, exécutez: ollama serve")
+                return error_text
+        
+        except requests.exceptions.Timeout:
+            logger.warning(f"Timeout lors de la requête (tentative {attempt+1}/3)")
+            if attempt < 2:
+                wait_time = 2 * (attempt + 1)
+                print(f"La requête prend plus de temps que prévu, nouvelle tentative dans {wait_time} secondes...")
+                time.sleep(wait_time)
+            else:
+                error_text = "Erreur: Timeout lors de l'inférence. Le modèle pourrait être trop grand pour votre machine."
+                logger.error(error_text)
+                print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+                return error_text
+        
         except Exception as e:
-            # Annuler le timeout
-            timeout_thread.cancel()
-            raise e
+            error_text = f"Erreur lors de l'inférence: {str(e)}"
+            logger.error(error_text)
+            print("\033[1;31m" + error_text + "\033[0m")  # Rouge
+            return error_text
 
-class ConfigManager:
-    """Gestion de la configuration de l'application"""
+def get_default_model():
+    """Récupère le modèle par défaut depuis la configuration avec vérification améliorée"""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ollama_config.json")
+    default_model = "llama3"
     
-    @staticmethod
-    def get_default_model():
-        """Récupère le modèle par défaut depuis la configuration"""
-        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
-        default_model = "llama3"
-        
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    model = config.get("default_model", default_model)
-                    
-                    # Si le modèle est "none", utiliser un modèle par défaut
-                    if model == "none":
-                        logger.warning("Le modèle par défaut est 'none', utilisation de 'llama3'")
-                        return default_model
-                    
-                    return model
-            except Exception as e:
-                logger.error(f"Erreur lors de la lecture du modèle par défaut: {e}")
-        
-        return default_model
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                configured_model = config.get("default_model", default_model)
+                
+                # Vérifier si le modèle est valide (n'est pas "aucun_modele_disponible")
+                if configured_model and configured_model != "aucun_modele_disponible":
+                    return configured_model
+        except json.JSONDecodeError:
+            logger.error(f"Erreur: Fichier de configuration corrompu: {config_path}")
+        except Exception as e:
+            logger.error(f"Erreur lors de la lecture du modèle par défaut: {e}")
     
-    @staticmethod
-    def save_inference_stats(model, prompt, max_tokens, output, execution_time=0):
-        """Enregistre les statistiques d'inférence pour analyse ultérieure"""
-        stats_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats")
-        
-        # Créer le répertoire stats s'il n'existe pas
-        if not os.path.exists(stats_dir):
-            os.makedirs(stats_dir)
-        
-        # Enregistrer l'inférence dans le fichier de statistiques
-        stats_file = os.path.join(stats_dir, "inference_stats.json")
-        
-        stats = []
-        if os.path.exists(stats_file):
-            try:
-                with open(stats_file, "r") as f:
-                    stats = json.load(f)
-            except:
-                stats = []
-        
-        # Ajouter la nouvelle inférence
-        stats.append({
-            "timestamp": time.time(),
-            "date": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "model": model,
-            "prompt": prompt,
-            "max_tokens": max_tokens,
-            "output_length": len(output.split()),
-            "execution_time": execution_time
-        })
-        
-        # Limiter à 200 dernières inférences
-        if len(stats) > 200:
-            stats = stats[-200:]
-        
-        # Enregistrer les statistiques
-        with open(stats_file, "w") as f:
-            json.dump(stats, f, indent=2)
+    # Vérifier s'il y a des modèles disponibles
+    try:
+        if ensure_ollama_running():
+            response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                if models:
+                    # Utiliser le premier modèle disponible
+                    return models[0].get("name")
+    except Exception as e:
+        logger.error(f"Erreur lors de la recherche d'un modèle disponible: {e}")
+    
+    return default_model
 
-def run_inference(prompt, model, max_length=500, temperature=0.7):
-    """
-    Exécute une inférence en utilisant Ollama
+def verify_ollama_installation():
+    """Vérifie l'installation d'Ollama et affiche des informations de diagnostic"""
+    print("\n=== Vérification de l'installation d'Ollama ===\n")
     
-    Args:
-        prompt (str): Le prompt à envoyer au modèle
-        model (str): Le nom du modèle à utiliser
-        max_length (int): Nombre maximum de tokens à générer
-        temperature (float): Température pour la génération (0-1)
-        
-    Returns:
-        str: Le texte généré
-    """
-    print(f"\033[1mExécution de l'inférence avec le modèle {model}\033[0m")
-    print(f"Prompt: {prompt}")
-    print(f"Paramètres: température={temperature}, max_tokens={max_length}")
+    # Vérifier si ollama est installé
+    try:
+        which_result = subprocess.run(["which", "ollama"], capture_output=True, text=True)
+        if which_result.returncode == 0:
+            ollama_path = which_result.stdout.strip()
+            print(f"✅ Ollama est installé à: {ollama_path}")
+            
+            # Vérifier la version
+            version_result = subprocess.run(["ollama", "--version"], capture_output=True, text=True)
+            if version_result.returncode == 0:
+                print(f"✅ Version d'Ollama: {version_result.stdout.strip()}")
+            else:
+                print("❌ Impossible d'obtenir la version d'Ollama")
+        else:
+            print("❌ Ollama n'est pas installé ou n'est pas dans le PATH")
+            print("   Installez Ollama via https://ollama.com/download")
+            return False
+    except Exception as e:
+        print(f"❌ Erreur lors de la vérification de l'installation: {e}")
+        return False
     
-    # Mesurer le temps d'exécution
-    start_time = time.time()
-    result = OllamaClient.run_inference(prompt, model, temperature, max_length, stream=False)
-    execution_time = time.time() - start_time
+    # Vérifier si le service est en cours d'exécution
+    try:
+        response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=REQUEST_TIMEOUT)
+        if response.status_code == 200:
+            print("✅ Service Ollama: En cours d'exécution")
+            
+            # Vérifier les modèles disponibles
+            models = response.json().get("models", [])
+            if models:
+                print(f"✅ Modèles disponibles: {len(models)}")
+                for model in models:
+                    name = model.get("name", "Inconnu")
+                    size = model.get("size", 0) // (1024 * 1024)  # Convertir en MB
+                    print(f"   - {name} ({size} MB)")
+            else:
+                print("⚠️ Aucun modèle disponible")
+                print("   Téléchargez un modèle avec: ollama pull llama3")
+        else:
+            print(f"❌ Service Ollama: Répond mais avec le code {response.status_code}")
+    except requests.exceptions.ConnectionError:
+        print("❌ Service Ollama: Non démarré ou inaccessible")
+        print("   Démarrez le service avec: ollama serve")
+    except Exception as e:
+        print(f"❌ Erreur lors de la vérification du service: {e}")
     
-    # Enregistrer les statistiques
-    ConfigManager.save_inference_stats(model, prompt, max_length, result, execution_time)
+    # Vérifier la configuration
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ollama_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+                default_model = config.get("default_model", "non défini")
+                print(f"✅ Configuration: Modèle par défaut = {default_model}")
+        except Exception as e:
+            print(f"❌ Erreur lors de la lecture de la configuration: {e}")
+    else:
+        print("⚠️ Fichier de configuration non trouvé")
     
-    print("\n\033[1mTexte généré:\033[0m")
-    print("\033[94m" + result + "\033[0m")
-    
-    return result
-
-def run_inference_stream(prompt, model, max_length=500, temperature=0.7):
-    """
-    Version streaming de l'inférence pour afficher les tokens en temps réel
-    
-    Args:
-        prompt (str): Le prompt à envoyer au modèle
-        model (str): Le nom du modèle à utiliser
-        max_length (int): Nombre maximum de tokens à générer
-        temperature (float): Température pour la génération (0-1)
-        
-    Returns:
-        str: Le texte généré
-    """
-    print(f"\033[1mExécution de l'inférence (streaming) avec le modèle {model}\033[0m")
-    print(f"Prompt: {prompt}")
-    print(f"Paramètres: température={temperature}, max_tokens={max_length}")
-    
-    # Mesurer le temps d'exécution
-    start_time = time.time()
-    result = OllamaClient.run_inference(prompt, model, temperature, max_length, stream=True)
-    execution_time = time.time() - start_time
-    
-    # Enregistrer les statistiques
-    ConfigManager.save_inference_stats(model, prompt, max_length, result, execution_time)
-    
-    print("\n\033[1mTexte généré:\033[0m")
-    print("\033[94m" + result + "\033[0m")
-    
-    return result
+    print("\n=== Fin de la vérification ===\n")
+    return True
 
 def main():
-    """Fonction principale"""
-    parser = argparse.ArgumentParser(
-        description="Exécuter une inférence avec un modèle Ollama",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument("--model", help="Nom du modèle à utiliser (par défaut: configuré dans ollama_config.json)")
+    # Configurer l'analyse des arguments
+    parser = argparse.ArgumentParser(description="Exécuter une inférence avec un modèle Ollama")
+    parser.add_argument("--model", help="Nom du modèle à utiliser")
     parser.add_argument("--no-stream", action="store_true", help="Désactiver le mode streaming")
     parser.add_argument("--temperature", type=float, default=0.7, help="Température pour la génération (0-1)")
     parser.add_argument("--max-tokens", type=int, default=500, help="Nombre maximum de tokens à générer")
-    parser.add_argument("--timeout", type=int, default=TIMEOUT, help=f"Délai d'exécution maximum en secondes (défaut: {TIMEOUT})")
-    parser.add_argument("--list-models", action="store_true", help="Lister les modèles disponibles")
-    parser.add_argument("--host", help=f"Hôte de l'API Ollama (défaut: {OLLAMA_API_HOST})")
-    parser.add_argument("--port", help=f"Port de l'API Ollama (défaut: {OLLAMA_API_PORT})")
+    parser.add_argument("--verify", action="store_true", help="Vérifier l'installation d'Ollama")
     parser.add_argument("prompt", nargs="*", help="Prompt à envoyer au modèle")
     
     args = parser.parse_args()
     
-    # Mise à jour de la configuration globale
-    global OLLAMA_API_HOST, OLLAMA_API_PORT, OLLAMA_API_BASE, TIMEOUT
-    if args.host:
-        OLLAMA_API_HOST = args.host
-    if args.port:
-        OLLAMA_API_PORT = args.port
-    OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
-    if args.timeout:
-        TIMEOUT = args.timeout
+    # Exécuter la vérification si demandé
+    if args.verify:
+        verify_ollama_installation()
+        return
     
-    # Lister les modèles si demandé
-    if args.list_models:
-        if not OllamaClient.ensure_ollama_running():
-            print("Erreur: Ollama n'est pas disponible. Vérifiez l'installation et le service.")
-            return 1
-        
-        models = OllamaClient.get_models()
-        if not models:
-            print("Aucun modèle disponible.")
-            return 0
-        
-        print("\n=== Modèles disponibles ===")
-        print(f"{'Nom':<20} {'Taille':<10} {'Modifié le':<20}")
-        print("-" * 50)
-        
-        default_model = ConfigManager.get_default_model()
-        
-        for model in models:
-            name = model.get("name", "Inconnu")
-            size = model.get("size", 0) // (1024 * 1024)  # Convertir en MB
-            modified = model.get("modified", "Inconnu")
-            default_mark = " (défaut)" if name == default_model else ""
-            print(f"{name:<20} {size:>6} MB  {modified:<20}{default_mark}")
-        
-        print("\nPour utiliser un modèle spécifique:")
-        print("python run-inference.py --model nom_du_modele \"Votre prompt ici\"")
-        
-        return 0
-    
-    # Vérifier si un prompt est fourni
+    # Vérifier si un prompt a été fourni
     if not args.prompt:
         parser.print_help()
-        return 1
-    
-    # Assembler le prompt complet
-    prompt = " ".join(args.prompt)
+        return
     
     # Si aucun modèle n'est spécifié, utiliser le modèle par défaut
-    model = args.model if args.model else ConfigManager.get_default_model()
+    model = args.model if args.model else get_default_model()
+    prompt = " ".join(args.prompt)
+    use_streaming = not args.no_stream
+    temperature = args.temperature
+    max_tokens = args.max_tokens
     
     # Afficher clairement le modèle sélectionné
     print(f"\033[1;36mModèle sélectionné: {model}\033[0m")  # En cyan pour le mettre en évidence
     
     # Choisir la méthode d'inférence en fonction du paramètre
-    use_streaming = not args.no_stream
-    result = None
-    
-    try:
-        if use_streaming:
-            result = run_inference_stream(prompt, model, args.max_tokens, args.temperature)
-        else:
-            result = run_inference(prompt, model, args.max_tokens, args.temperature)
-        
-        # Un code de retour 0 indique un succès
-        return 0
-    except Exception as e:
-        logger.error(f"Erreur lors de l'exécution de l'inférence: {e}")
-        print(f"Erreur: {e}")
-        return 1
+    if use_streaming:
+        run_inference_stream(prompt, model, max_tokens, temperature)
+    else:
+        run_inference(prompt, model, max_tokens, temperature)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
