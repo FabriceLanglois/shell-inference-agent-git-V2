@@ -1,14 +1,27 @@
 # Assistant IA Ollama v2.0
 
-Une interface web moderne et élégante pour interagir avec des modèles d'IA en local via Ollama.
+<div align="center">
 
 ![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)
+![Flask](https://img.shields.io/badge/Flask-2.3.3-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Docker](https://img.shields.io/badge/Docker-supported-blue.svg)
+
+Une interface web moderne et élégante pour interagir avec des modèles d'IA en local via Ollama.
+
+[Installation](#-installation) • 
+[Fonctionnalités](#-fonctionnalités) •  
+[Docker](#-utilisation-avec-docker) • 
+[Documentation](#-documentation) • 
+[Tests](#-tests) • 
+[Contribution](#-contribution)
 
 <p align="center">
   <img src="static/img/screenshot.png" alt="Assistant IA Ollama" width="800">
 </p>
+
+</div>
 
 ## 📋 Présentation
 
@@ -16,6 +29,84 @@ Assistant IA Ollama est une application web développée en Flask qui permet d'i
 
 1. **Console Interactive** : Une interface de type terminal pour exécuter des commandes et interagir avec les modèles d'IA.
 2. **Gestionnaire de Modèles** : Une interface conviviale pour télécharger, tester et gérer les modèles Ollama.
+
+## 🚀 Installation
+
+### Option 1: Installation automatique (recommandée)
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/votre-username/assistant-ia-ollama.git
+cd assistant-ia-ollama
+
+# Exécuter le script d'installation complet
+chmod +x install-all.sh
+./install-all.sh
+```
+
+Ce script configure l'environnement Python, installe Ollama si nécessaire, et effectue toutes les configurations requises.
+
+### Option 2: Installation manuelle étape par étape
+
+```bash
+# Cloner le dépôt
+git clone https://github.com/votre-username/assistant-ia-ollama.git
+cd assistant-ia-ollama
+
+# Configurer l'environnement Python
+chmod +x setup-environment.sh
+./setup-environment.sh
+
+# Activer l'environnement virtuel
+source venv/bin/activate
+
+# Installer Ollama si nécessaire
+chmod +x install-ollama.sh
+./install-ollama.sh
+```
+
+### Prérequis
+
+- Python 3.8 ou supérieur
+- [Ollama](https://ollama.com/) installé sur votre système (ou accessible via réseau)
+- Navigateur web moderne
+
+## 🏃‍♂️ Utilisation
+
+```bash
+# Activer l'environnement virtuel
+source venv/bin/activate  # Sur Windows: venv\Scripts\activate
+
+# Lancer l'application
+python app.py
+```
+
+Ouvrez votre navigateur et accédez à :
+```
+http://localhost:5000
+```
+
+## 🐳 Utilisation avec Docker
+
+### Option 1: Docker Compose (recommandée)
+
+```bash
+# Lancer l'application et Ollama ensemble
+docker-compose up -d
+
+# Pour arrêter les services
+docker-compose down
+```
+
+### Option 2: Dockerfile personnalisé
+
+```bash
+# Construire l'image
+docker build -t assistant-ia-ollama .
+
+# Lancer le conteneur (en supposant qu'Ollama est exécuté sur la machine hôte)
+docker run -p 5000:5000 assistant-ia-ollama
+```
 
 ## ✨ Fonctionnalités
 
@@ -27,6 +118,7 @@ Assistant IA Ollama est une application web développée en Flask qui permet d'i
 - **Exploration de fichiers intégrée** avec navigation visuelle
 - **Copie intelligente** du contenu du terminal
 - **Raccourcis clavier** pour une utilisation efficace
+- **Reconnaissance vocale** pour la saisie de commandes (navigateurs compatibles)
 
 ### 🧠 Gestion des Modèles
 - **Téléchargement simplifié** de nouveaux modèles depuis la bibliothèque Ollama
@@ -41,117 +133,6 @@ Assistant IA Ollama est une application web développée en Flask qui permet d'i
 - **Accessibilité améliorée** conforme aux standards WCAG
 - **Notifications toast** pour les retours utilisateur
 - **Modals interactifs** pour les actions complexes
-
-## 🖼️ Captures d'écran
-
-<p align="center">
-  <img src="static/img/console.png" alt="Console Interactive" width="400" style="margin-right: 10px;">
-  <img src="static/img/models.png" alt="Gestionnaire de Modèles" width="400">
-</p>
-
-## 🚀 Installation
-
-### Prérequis
-
-- Python 3.8 ou supérieur
-- [Ollama](https://ollama.com/) installé sur votre système (ou accessible via réseau)
-
-### Installation automatique
-
-1. Clonez ce dépôt :
-   ```bash
-   git clone https://github.com/votre-username/assistant-ia-ollama.git
-   cd assistant-ia-ollama
-   ```
-
-2. Exécutez le script d'installation :
-   ```bash
-   chmod +x setup-environment.sh
-   ./setup-environment.sh
-   ```
-
-3. Si vous n'avez pas encore Ollama, installez-le :
-   ```bash
-   chmod +x install-ollama.sh
-   ./install-ollama.sh
-   ```
-
-### Installation manuelle
-
-1. Clonez ce dépôt :
-   ```bash
-   git clone https://github.com/votre-username/assistant-ia-ollama.git
-   cd assistant-ia-ollama
-   ```
-
-2. Créez et activez un environnement virtuel :
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Sur Windows: venv\Scripts\activate
-   ```
-
-3. Installez les dépendances :
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Créez les répertoires requis :
-   ```bash
-   mkdir -p templates static/img static/css static/js stats logs
-   ```
-
-5. Initialisez les fichiers de configuration :
-   ```bash
-   echo '[]' > stats/inference_stats.json
-   echo '{"default_model": "llama3"}' > ollama_config.json
-   ```
-
-## 🏃‍♂️ Utilisation
-
-1. Activez l'environnement virtuel si ce n'est pas déjà fait :
-   ```bash
-   source venv/bin/activate  # Sur Windows: venv\Scripts\activate
-   ```
-
-2. Lancez l'application :
-   ```bash
-   python app.py
-   ```
-
-3. Ouvrez votre navigateur et accédez à :
-   ```
-   http://localhost:5000
-   ```
-
-## 📊 Structure du Projet
-
-```
-assistant-ia-ollama/
-├── app.py                  # Application Flask principale
-├── run-inference.py        # Script d'inférence avec Ollama
-├── manage-models.py        # Gestionnaire de modèles Ollama
-├── setup-environment.sh    # Script d'installation de l'environnement
-├── install-ollama.sh       # Script d'installation d'Ollama
-├── requirements.txt        # Dépendances Python pour le projet
-├── README.md               # Documentation du projet
-├── static/
-│   ├── css/
-│   │   ├── main.css        # Styles partagés
-│   │   ├── console.css     # Styles pour la console
-│   │   └── ollama.css      # Styles pour la page Ollama
-│   ├── js/
-│   │   ├── common.js       # Fonctions JS partagées
-│   │   ├── console.js      # Fonctions JS pour la console
-│   │   └── ollama.js       # Fonctions JS pour la page Ollama
-│   └── img/                # Images et ressources visuelles
-├── templates/
-│   ├── index.html          # Interface console principale
-│   ├── ollama_manager.html # Interface de gestion Ollama
-│   ├── 404.html            # Page d'erreur 404
-│   └── 500.html            # Page d'erreur 500
-├── logs/                   # Logs applicatifs
-└── stats/                  # Statistiques d'utilisation
-```
 
 ## 🛠️ API REST
 
@@ -177,6 +158,84 @@ L'application est conçue pour utiliser automatiquement un GPU NVIDIA si disponi
 1. Vous avez installé les pilotes NVIDIA appropriés
 2. CUDA est correctement configuré
 3. PyTorch est installé avec le support CUDA
+
+## 📊 Structure du Projet
+
+```
+assistant-ia-ollama/
+├── app.py                  # Application Flask principale
+├── run-inference.py        # Script d'inférence avec Ollama
+├── manage-models.py        # Gestionnaire de modèles Ollama
+├── setup-environment.sh    # Script d'installation de l'environnement
+├── install-ollama.sh       # Script d'installation d'Ollama
+├── install-all.sh          # Script d'installation complet
+├── Dockerfile              # Configuration Docker
+├── docker-compose.yml      # Configuration Docker Compose
+├── requirements.txt        # Dépendances Python pour le projet
+├── config.json             # Configuration centrale de l'application
+├── .env.example            # Template pour les variables d'environnement
+├── test_app.py             # Tests unitaires
+├── pytest.ini              # Configuration pour pytest
+├── LICENSE                 # Licence MIT
+├── README.md               # Documentation du projet
+├── static/
+│   ├── css/
+│   │   ├── main.css        # Styles partagés
+│   │   ├── console.css     # Styles pour la console
+│   │   └── ollama.css      # Styles pour la page Ollama
+│   ├── js/
+│   │   ├── common.js       # Fonctions JS partagées
+│   │   ├── console.js      # Fonctions JS pour la console
+│   │   └── ollama.js       # Fonctions JS pour la page Ollama
+│   └── img/                # Images et ressources visuelles
+├── templates/
+│   ├── index.html          # Interface console principale
+│   ├── ollama_manager.html # Interface de gestion Ollama
+│   ├── 404.html            # Page d'erreur 404
+│   └── 500.html            # Page d'erreur 500
+├── logs/                   # Logs applicatifs
+└── stats/                  # Statistiques d'utilisation
+```
+
+## 🔍 Configuration
+
+### Variables d'environnement
+
+Copiez le fichier `.env.example` vers `.env` et ajustez les paramètres selon vos besoins :
+
+```bash
+cp .env.example .env
+```
+
+Options principales :
+- `FLASK_SECRET_KEY` : Clé secrète pour sécuriser les sessions
+- `OLLAMA_HOST` : Hôte où Ollama est exécuté (par défaut: localhost)
+- `OLLAMA_PORT` : Port Ollama (par défaut: 11434)
+- `DEFAULT_MODEL` : Modèle à utiliser par défaut
+
+### Fichier de configuration
+
+Le fichier `config.json` contient des paramètres avancés pour l'application. Vous pouvez le modifier pour personnaliser :
+
+- Les paramètres du serveur
+- Les options d'inférence par défaut
+- Les paramètres de journalisation
+- Les préférences d'interface utilisateur
+
+## 🧪 Tests
+
+L'application est fournie avec une suite de tests unitaires pour vérifier son bon fonctionnement :
+
+```bash
+# Activer l'environnement virtuel
+source venv/bin/activate
+
+# Exécuter tous les tests
+pytest
+
+# Exécuter des tests spécifiques
+pytest test_app.py -k test_api
+```
 
 ## 🔍 Troubleshooting
 
@@ -207,6 +266,12 @@ Les contributions sont les bienvenues ! Pour contribuer :
 4. Poussez vers la branche (`git push origin feature/nouvelle-fonctionnalite`)
 5. Ouvrez une Pull Request
 
+Veuillez vous assurer que vos contributions :
+- Respectent le style de code du projet
+- Incluent des tests unitaires pour les nouvelles fonctionnalités
+- Mettent à jour la documentation si nécessaire
+- Passent tous les tests automatisés
+
 ## 📝 Améliorations v2.0
 
 Cette version 2.0 apporte de nombreuses améliorations par rapport à la v1.0 :
@@ -217,8 +282,17 @@ Cette version 2.0 apporte de nombreuses améliorations par rapport à la v1.0 :
 - **Accessibilité WCAG** intégrée pour tous les utilisateurs
 - **Mode sombre/clair** avec transitions fluides
 - **Sécurité renforcée** contre les injections et vulnérabilités
+- **Support Docker** pour un déploiement simplifié
 - **Documentation complète** du code et des APIs
 - **Tests unitaires** pour les fonctions critiques
+
+## 📖 Documentation
+
+Une documentation détaillée est disponible dans le code source et les commentaires. Pour une aide plus approfondie :
+
+- Consultez les docstrings dans les fichiers Python
+- Explorez le dossier `docs/` (si ajouté ultérieurement)
+- Consultez le wiki du projet sur GitHub (si disponible)
 
 ## 📜 Licence
 
@@ -230,4 +304,8 @@ Si vous rencontrez des problèmes ou avez des questions, veuillez ouvrir un tick
 
 ---
 
+<div align="center">
 Développé avec ❤️ pour la communauté de l'IA open-source
+
+**Inspiré par la puissance des modèles d'IA locaux et la simplicité d'Ollama**
+</div>

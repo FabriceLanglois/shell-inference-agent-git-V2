@@ -1,2 +1,75 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environnement virtuel
+venv/
+ENV/
+.env
+
+# Logs et statistiques
+logs/
+*.log
+stats/*.json
+!stats/.gitkeep
+
+# Dossiers spécifiques au projet
+static/img/*.png
+static/img/*.jpg
+!static/img/chart-placeholder.png
+!static/img/screenshot.png
+!static/img/console.png
+!static/img/models.png
+!static/img/favicon.ico
+
+# Fichiers de configuration
+ollama_config.json
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Fichiers générés automatiquement
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Système d'exploitation
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Éditeurs et IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Fichiers temporaires
+temp/
+tmp/
+.tmp/

@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: assistant-ia-web
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./stats:/app/stats
+      - ./logs:/app/logs
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+    depends_on:
+      - ollama
+    networks:
+      - assistant-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: assistant-ia-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - assistant-network
+    restart: unless-stopped
+    # Vous pouvez télécharger un modèle automatiquement au démarrage avec une commande comme celle-ci:
+    # command: sh -c "ollama pull llama3 && ollama serve"
+
+volumes:
+  ollama-data:
+    name: ollama-data
+
+networks:
+  assistant-network:
+    name: assistant-network
+
+# Instructions d'utilisation:
+# 1. Démarrer les services: docker-compose up -d
+# 2. Ouvrir l'application: http://localhost:5000
+# 3. Arrêter les services: docker-compose down
+# 
+# Pour télécharger un modèle:
+# docker-compose exec ollama ollama pull llama3

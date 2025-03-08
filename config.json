@@ -1,0 +1,70 @@
+{
+  "application": {
+    "name": "Assistant IA Ollama",
+    "version": "2.0.0",
+    "description": "Interface web pour interagir avec des modèles d'IA via Ollama",
+    "author": "Votre Nom",
+    "license": "MIT"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "debug": true,
+    "max_content_length": 50000000,
+    "templates_auto_reload": true
+  },
+  "ollama": {
+    "host": "localhost",
+    "port": 11434,
+    "api_base": "http://localhost:11434/api",
+    "timeout": 30
+  },
+  "inference": {
+    "default_model": "llama3",
+    "default_temperature": 0.7,
+    "default_max_tokens": 500,
+    "request_timeout": 120,
+    "history_limit": 200
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file_rotation_size": 5000000,
+    "file_backup_count": 5
+  },
+  "ui": {
+    "default_theme": "dark",
+    "toast_duration": 3000,
+    "terminal_max_lines": 1000,
+    "command_history_size": 100,
+    "gpu_refresh_interval": 30000
+  },
+  "paths": {
+    "logs": "logs",
+    "stats": "stats",
+    "templates": "templates",
+    "static": "static"
+  },
+  "recommended_models": [
+    {
+      "name": "llama3",
+      "size": "4.7 GB",
+      "description": "Dernière version du modèle Llama de Meta"
+    },
+    {
+      "name": "phi3:mini",
+      "size": "1.7 GB",
+      "description": "Petit modèle efficace de Microsoft"
+    },
+    {
+      "name": "mistral",
+      "size": "4.1 GB",
+      "description": "Modèle open-source performant avec licence permissive"
+    },
+    {
+      "name": "gemma:2b",
+      "size": "1.4 GB",
+      "description": "Petit modèle efficient de Google"
+    }
+  ]
+}
