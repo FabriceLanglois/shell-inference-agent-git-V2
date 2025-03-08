@@ -580,45 +580,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            if (data.success) {
-                // Afficher le résultat
-                testResultContent.innerHTML = `
-                    <div style="white-space: pre-wrap; color: var(--text-color);">${data.response}</div>
-                    <div style="margin-top: 15px; font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-                        <span>Tokens générés: ~${data.tokens || 'N/A'}</span>
-                        <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="copyToClipboard('${escapeHtml(data.response)}')">
-                            <i class="fas fa-copy"></i> Copier
-                        </button>
-                    </div>
-                `;
+            // À ajouter dans static/js/ollama.js dans la fonction testModel()
+// Remplacez ce code dans la partie qui affiche le résultat réussi du test :
+
+if (data.success) {
+    // Afficher le résultat avec un bouton de copie amélioré
+    testResultContent.innerHTML = `
+        <div style="white-space: pre-wrap; color: var(--text-color);">${data.response}</div>
+        <div style="margin-top: 15px; font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center;">
+            <span>Tokens générés: ~${data.tokens || 'N/A'}</span>
+            <button class="btn" style="padding: 8px 15px; font-size: 13px; display: flex; align-items: center; gap: 5px;" 
+                    onclick="copyToClipboard(${JSON.stringify(data.response)})">
+                <i class="fas fa-copy"></i> Copier le résultat
+            </button>
+        </div>
+    `;
+    
+    // Mettre à jour les statistiques
+    loadInferenceStats();
+    
+    // Définir ce modèle comme modèle par défaut si ce n'est pas déjà le cas
+    const currentModelElement = document.getElementById('currentModel');
+    if (currentModelElement && !currentModelElement.textContent.includes(model)) {
+        // Mettre à jour le modèle par défaut
+        fetch('/api/set-default-model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model })
+        })
+        .then(response => response.json())
+        .then(updateData => {
+            if (updateData.success) {
+                // Mettre à jour l'affichage
+                currentModelElement.innerHTML = `<i class="fas fa-brain"></i> Modèle: ${model}`;
+                showToast(`Modèle ${model} défini comme modèle par défaut`);
                 
-                // Mettre à jour les statistiques
-                loadInferenceStats();
-                
-                // Définir ce modèle comme modèle par défaut si ce n'est pas déjà le cas
-                const currentModelElement = document.getElementById('currentModel');
-                if (currentModelElement && !currentModelElement.textContent.includes(model)) {
-                    // Mettre à jour le modèle par défaut
-                    fetch('/api/set-default-model', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ model })
-                    })
-                    .then(response => response.json())
-                    .then(updateData => {
-                        if (updateData.success) {
-                            // Mettre à jour l'affichage
-                            currentModelElement.innerHTML = `<i class="fas fa-brain"></i> Modèle: ${model}`;
-                            
-                            // Recharger la liste des modèles pour mettre à jour l'interface
-                            loadModelsList('testModelSelect', loadModelsGrid);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Erreur lors de la mise à jour du modèle par défaut:', error);
-                    });
-                }
-            } else {
+                // Recharger la liste des modèles pour mettre à jour l'interface
+                loadModelsList('testModelSelect', loadModelsGrid);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de la mise à jour du modèle par défaut:', error);
+        });
+    }
+} else {
                 testResultContent.innerHTML = `<div class="error">Erreur: ${data.error || 'Erreur inconnue'}</div>`;
             }
         })

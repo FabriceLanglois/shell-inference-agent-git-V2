@@ -843,49 +843,178 @@ const ConsoleManager = {
     /**
      * Exécute une inférence avec le modèle sélectionné
      */
-    runInference: function() {
-        if (!this.elements.modelSelect) return;
-        if (!this.elements.promptInput) return;
+/**
+ * Exécute une inférence avec le modèle sélectionné
+ */
+runInference: function() {
+    const model = modelSelect.value;
+    const prompt = promptInput.value.trim();
+    const temperature = temperatureSlider.value;
+    const maxTokens = maxTokensSlider.value;
+    
+    if (!model || model === 'loading' || model === 'none') {
+        // Vérifier s'il n'y a aucun modèle disponible
+        if (modelSelect.options.length <= 1 || modelSelect.options[0].value === 'none') {
+            showToast('Erreur: Aucun modèle disponible. Allez dans "Gestion Ollama" pour en télécharger un.', 5000, true);
+            inferenceModal.style.display = 'none';
+            return;
+        }
         
-        const model = this.elements.modelSelect.value;
-        const prompt = this.elements.promptInput.value.trim();
-        const temperature = this.elements.temperatureSlider.value;
-        const maxTokens = this.elements.maxTokensSlider.value;
+        showToast('Erreur: Veuillez sélectionner un modèle', 3000, true);
+        return;
+    }
+    
+    if (!prompt) {
+        showToast('Erreur: Le prompt est vide', 3000, true);
+        return;
+    }
+    
+    // Fermer le modal
+    inferenceModal.style.display = 'none';
+    
+    // Mettre à jour l'affichage du modèle actuel
+    const currentModelElement = document.getElementById('currentModel');
+    if (currentModelElement) {
+        currentModelElement.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Modèle: ${model} (en cours d'utilisation...)`;
+    }
+    
+    // Construire la commande d'inférence avec des options explicites
+    const command = `python run-inference.py --model ${model} --temperature ${temperature} --max-tokens ${maxTokens} "${prompt}"`;
+    
+    // Afficher une notification de chargement
+    addTerminalLine(`Inférence en cours avec le modèle ${model}...`, 'info');
+    
+    // Désactiver le bouton d'inférence pendant l'exécution
+    if (inferenceBtn) {
+        inferenceBtn.disabled = true;
+        inferenceBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inférence en cours...';
         
-        if (!model || model === 'loading' || model === 'none') {
-            // Vérifier s'il n'y a aucun modèle disponible
-            if (this.elements.modelSelect.options.length <= 1 || this.elements.modelSelect.options[0].value === 'none') {
-                AssistantIA.showToast('Erreur: Aucun modèle disponible. Allez dans "Gestion Ollama" pour en télécharger un.', 5000, 'error');
-                this.elements.inferenceModal.style.display = 'none';
-                return;
+        // Réactiver le bouton après un délai plus long (30 secondes max)
+        setTimeout(function() {
+            if (inferenceBtn.disabled) {
+                inferenceBtn.disabled = false;
+                inferenceBtn.innerHTML = '<i class="fas fa-brain"></i> Inférence directe';
+                showToast('L\'inférence prend plus de temps que prévu. Vérifiez le terminal pour les résultats.', 5000);
+            }
+        }, 30000);
+    }
+    
+    // Exécuter la commande avec un timeout plus long
+    fetch('/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Réactiver le bouton d'inférence
+        if (inferenceBtn) {
+            inferenceBtn.disabled = false;
+            inferenceBtn.innerHTML = '<i class="fas fa-brain"></i> Inférence directe';
+        }
+        
+        // Restaurer l'affichage du modèle actuel
+        if (currentModelElement) {
+            currentModelElement.innerHTML = `<i class="fas fa-brain"></i> Modèle: ${model}`;
+        }
+        
+        if (data.error) {
+            addTerminalLine(`Erreur: ${data.error}`, 'error');
+            return;
+        }
+        
+        if (data.stderr) {
+            const lines = data.stderr.trim().split('\n');
+            lines.forEach(line => {
+                addTerminalLine(line, 'error');
+            });
+        }
+        
+        // Traiter la sortie standard
+        if (data.stdout) {
+            // Capturer uniquement la partie générée
+            const output = data.stdout;
+            const lines = output.split('\n');
+            let resultText = '';
+            let isResultSection = false;
+            
+            for (const line of lines) {
+                if (line.includes('Texte généré:')) {
+                    isResultSection = true;
+                    addTerminalLine('---- Résultat de l\'inférence ----', 'success');
+                    continue;
+                }
+                
+                if (isResultSection && 
+                    !line.includes('Inférence terminée') && 
+                    !line.includes('GPU détecté') && 
+                    !line.includes('Utilisation mémoire')) {
+                    resultText += line + '\n';
+                    addTerminalLine(line);
+                }
+                
+                // Afficher aussi les informations de performance
+                if (line.includes('Inférence terminée')) {
+                    addTerminalLine(line, 'info');
+                }
+                
+                if (line.includes('GPU détecté') || line.includes('Utilisation mémoire')) {
+                    addTerminalLine(line, 'info');
+                }
             }
             
-            AssistantIA.showToast('Erreur: Veuillez sélectionner un modèle', null, 'error');
-            return;
+            if (resultText.trim()) {
+                lastOutput = resultText.trim();
+            } else {
+                // Si la partie générée n'est pas bien identifiée, utiliser toute la sortie
+                lastOutput = output;
+                if (!isResultSection) {
+                    addTerminalLine('Sortie complète :', 'info');
+                    lines.forEach(line => {
+                        addTerminalLine(line);
+                    });
+                }
+            }
+            
+            addTerminalLine('---- Fin du résultat ----', 'success');
+            
+            // Définir ce modèle comme modèle par défaut
+            if (model !== currentModelName) {
+                updateCurrentModel(model)
+                    .then(success => {
+                        if (success) {
+                            addTerminalLine(`Modèle ${model} défini comme modèle par défaut`, 'info');
+                        }
+                    });
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Erreur lors de l\'exécution de la commande:', error);
+        
+        // Réactiver le bouton d'inférence
+        if (inferenceBtn) {
+            inferenceBtn.disabled = false;
+            inferenceBtn.innerHTML = '<i class="fas fa-brain"></i> Inférence directe';
         }
         
-        if (!prompt) {
-            AssistantIA.showToast('Erreur: Le prompt est vide', null, 'error');
-            return;
+        // Restaurer l'affichage du modèle actuel
+        if (currentModelElement) {
+            currentModelElement.innerHTML = `<i class="fas fa-brain"></i> Modèle: ${model}`;
         }
         
-        // Fermer le modal
-        this.elements.inferenceModal.style.display = 'none';
+        addTerminalLine(`Erreur: ${error.message}`, 'error');
         
-        // Mettre à jour l'affichage du modèle actuel
-        AssistantIA.updateCurrentModel(model).catch(error => {
-            console.error('Erreur lors de la mise à jour du modèle actuel:', error);
-        });
-        
-        // Construire la commande d'inférence avec des options explicites
-        const command = `python run-inference.py --model ${model} --temperature ${temperature} --max-tokens ${maxTokens} "${prompt}"`;
-        
-        // Afficher une notification de chargement
-        this.addTerminalLine(`Inférence en cours avec le modèle ${model}...`, 'info');
-        
-        // Exécuter la commande
-        this.executeCommand(command);
-    },
+        if (error.message.includes('timeout')) {
+            addTerminalLine("L'opération a pris trop de temps. Essayez avec un prompt plus court ou un modèle plus petit.", 'error');
+        }
+    });
+    }
     
     /**
      * Affiche le modal d'explorateur de fichiers

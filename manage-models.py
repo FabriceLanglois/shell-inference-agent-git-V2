@@ -399,6 +399,104 @@ def show_models_info():
     print("\nPour télécharger un modèle:")
     print("python manage-models.py pull nom_du_modele")
 
+# Ajouter cette fonction vers la ligne ~400 dans le fichier manage-models.py
+def ping_ollama():
+    """Vérifie si le service Ollama est actif et répond"""
+    print_step("Vérification", "Connexion à Ollama")
+    
+    try:
+        if check_ollama_running(retries=2):
+            print_result(True, "Le service Ollama est en cours d'exécution et répond correctement")
+            
+            # Vérifier les modèles disponibles
+            try:
+                response = requests.get(f"{OLLAMA_API_BASE}/tags", timeout=REQUEST_TIMEOUT)
+                if response.status_code == 200:
+                    models = response.json().get("models", [])
+                    if models:
+                        print_result(True, f"{len(models)} modèle(s) disponible(s):")
+                        for model in models:
+                            name = model.get("name", "Inconnu")
+                            print(f"      - {name}")
+                    else:
+                        print_result(False, "Aucun modèle n'est installé")
+            except Exception as e:
+                logger.error(f"Erreur lors de la vérification des modèles: {e}")
+                
+            return True
+        else:
+            print_result(False, "Le service Ollama n'est pas en cours d'exécution ou ne répond pas")
+            print("Pour démarrer Ollama, exécutez: ollama serve")
+            return False
+    except Exception as e:
+        print_result(False, f"Erreur lors de la vérification d'Ollama: {e}")
+        return False
+
+# Puis, modifier la fonction main() pour ajouter la commande ping
+# Autour de la ligne ~480-500 dans le fichier manage-models.py
+def main():
+    # Ajout d'un parseur d'arguments pour les options JSON
+    parser = argparse.ArgumentParser(description="Gestionnaire de modèles Ollama")
+    subparsers = parser.add_subparsers(dest="command", help="Commande à exécuter")
+    
+    # Commande list
+    list_parser = subparsers.add_parser("list", help="Lister les modèles disponibles")
+    list_parser.add_argument("--json", action="store_true", help="Sortie au format JSON")
+    
+    # Commande pull
+    pull_parser = subparsers.add_parser("pull", help="Télécharger un modèle")
+    pull_parser.add_argument("model", help="Nom du modèle à télécharger")
+    
+    # Commande delete
+    delete_parser = subparsers.add_parser("delete", help="Supprimer un modèle")
+    delete_parser.add_argument("model", help="Nom du modèle à supprimer")
+    
+    # Commande info
+    info_parser = subparsers.add_parser("info", help="Informations sur les modèles recommandés")
+    
+    # Commande set-default
+    default_parser = subparsers.add_parser("set-default", help="Définir le modèle par défaut")
+    default_parser.add_argument("model", help="Nom du modèle à définir comme défaut")
+    
+    # Commande current
+    current_parser = subparsers.add_parser("current", help="Obtenir le modèle actuel")
+    current_parser.add_argument("--json", action="store_true", help="Sortie au format JSON")
+    
+    # Commande verify
+    verify_parser = subparsers.add_parser("verify", help="Vérifier l'installation d'Ollama")
+    
+    # Ajouter la commande ping (alias de verify)
+    ping_parser = subparsers.add_parser("ping", help="Vérifier si Ollama répond")
+    
+    args = parser.parse_args()
+    
+    if args.command == "list":
+        if args.json:
+            result = list_models(json_output=True)
+            if result:
+                print(result)
+        else:
+            list_models()
+    elif args.command == "pull":
+        pull_model(args.model)
+    elif args.command == "delete":
+        delete_model(args.model)
+    elif args.command == "info":
+        show_models_info()
+    elif args.command == "set-default":
+        set_default_model(args.model)
+    elif args.command == "current":
+        if args.json:
+            result = get_current_model_info(json_output=True)
+            if result:
+                print(result)
+        else:
+            get_current_model_info()
+    elif args.command == "verify" or args.command == "ping":
+        ping_ollama()
+    else:
+        parser.print_help()
+
 def verify_ollama_installation():
     """Vérifie si Ollama est correctement installé"""
     try:
