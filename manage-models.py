@@ -11,6 +11,10 @@ from logging.handlers import RotatingFileHandler
 
 import requests
 
+OLLAMA_API_HOST = os.environ.get("OLLAMA_API_HOST", "localhost")
+OLLAMA_API_PORT = os.environ.get("OLLAMA_API_PORT", "11434")
+OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
+
 # Configuration des logs avec rotation des fichiers
 log_directory = "logs"
 os.makedirs(log_directory, exist_ok=True)
@@ -36,9 +40,9 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 # Configuration
-OLLAMA_API_HOST = os.environ.get("OLLAMA_API_HOST", "localhost")
-OLLAMA_API_PORT = os.environ.get("OLLAMA_API_PORT", "11434")
-OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
+#OLLAMA_API_HOST = os.environ.get("OLLAMA_API_HOST", "localhost")
+#OLLAMA_API_PORT = os.environ.get("OLLAMA_API_PORT", "11434")
+#OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ollama_config.json")
 
 class OllamaService:
@@ -452,6 +456,21 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
+    # Ajouter des options globales
+    parser.add_argument("--host", help=f"Hôte de l'API Ollama (défaut: {OLLAMA_API_HOST})")
+    parser.add_argument("--port", help=f"Port de l'API Ollama (défaut: {OLLAMA_API_PORT})")
+    
+    # Après avoir traité les arguments
+    args = parser.parse_args()
+    
+    # Mise à jour de la configuration globale
+    global OLLAMA_API_HOST, OLLAMA_API_PORT, OLLAMA_API_BASE
+    if args.host:
+        OLLAMA_API_HOST = args.host
+    if args.port:
+        OLLAMA_API_PORT = args.port
+    OLLAMA_API_BASE = f"http://{OLLAMA_API_HOST}:{OLLAMA_API_PORT}/api"
+
     # Ajouter des sous-commandes
     subparsers = parser.add_subparsers(dest="command", help="Commande à exécuter")
     
