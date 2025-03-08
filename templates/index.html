@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistant IA - Console interactive pour interagir avec des modèles d'IA en local via Ollama">
+    <meta name="theme-color" content="#0f172a">
+    <title>Assistant IA - Console</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-theme="dark">
+    <header>
+        <div class="header-nav">
+            <a href="/" class="active" aria-current="page">Console</a>
+            <a href="/ollama">Gestion Ollama</a>
+        </div>
+        <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
+            <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="container">
+        <h1>Console Interactive d'Assistant IA</h1>
+        
+        <div class="terminal-info">
+            <div>
+                <span class="model-info" id="currentModel"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Modèle: chargement...</span>
+            </div>
+            <div class="gpu-info" id="gpuInfo">
+                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Chargement des informations GPU...
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn focus-visible" id="checkOllamaBtn" aria-label="Vérifier si Ollama est en cours d'exécution">
+                <i class="fas fa-check-circle" aria-hidden="true"></i> Vérifier Ollama
+            </button>
+            <button class="btn direct-inference-btn focus-visible" id="inferenceBtn" aria-label="Lancer une inférence directe">
+                <i class="fas fa-brain" aria-hidden="true"></i> Inférence directe
+            </button>
+            <button class="btn focus-visible" id="browserBtn" aria-label="Ouvrir l'explorateur de fichiers">
+                <i class="fas fa-folder" aria-hidden="true"></i> Explorateur de fichiers
+            </button>
+            <button class="btn btn-danger clear-btn focus-visible" id="clearBtn" aria-label="Effacer le contenu du terminal">
+                <i class="fas fa-eraser" aria-hidden="true"></i> Effacer la console
+            </button>
+            <div class="shortcuts-info" aria-label="Raccourcis clavier disponibles" tabindex="0">
+                <i class="fas fa-keyboard" aria-hidden="true"></i>
+            </div>
+        </div>
+
+        <div class="terminal" id="terminal" tabindex="0" role="log" aria-label="Terminal">
+            <div class="terminal-line">
+                <span class="prompt">assistant-ia $</span> Bienvenue dans la console de l'Assistant IA!
+            </div>
+            <div class="terminal-line">
+                <span class="prompt">assistant-ia $</span> Entrez une commande ou utilisez les options ci-dessus
+            </div>
+            <div class="terminal-line">
+                <span class="prompt">assistant-ia $</span> Essayez "python run-inference.py --help" pour commencer
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label for="commandInput" class="sr-only">Entrez une commande</label>
+            <input type="text" id="commandInput" placeholder="Entrez une commande..." aria-label="Champ de commande">
+            <button class="btn execute-btn focus-visible" id="executeBtn" aria-label="Exécuter la commande">
+                <i class="fas fa-play" aria-hidden="true"></i> Exécuter
+            </button>
+            <button class="btn mic-btn focus-visible" id="micBtn" aria-label="Activer la reconnaissance vocale">
+                <i class="fas fa-microphone" aria-hidden="true"></i>
+                <div class="mic-visualization" id="micVisualization" aria-hidden="true"></div>
+            </button>
+        </div>
+
+        <div class="header-buttons">
+            <div class="copy-dropdown">
+                <button class="btn copy-all-btn dropdown-btn focus-visible" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-copy" aria-hidden="true"></i> Copier
+                </button>
+                <div class="dropdown-content" role="menu">
+                    <a id="copyAllBtn" role="menuitem" tabindex="0">
+                        <i class="fas fa-clone" aria-hidden="true"></i> Copier tout le terminal
+                    </a>
+                    <a id="copyLastOutputBtn" role="menuitem" tabindex="0">
+                        <i class="fas fa-arrow-up" aria-hidden="true"></i> Copier dernière sortie
+                    </a>
+                    <a id="lastOutputToPromptBtn" role="menuitem" tabindex="0">
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i> Dernière sortie → Prompt
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-text" id="statusText">Prêt</div>
+            <div id="execTimeInfo">Temps d'exécution: 0.00s</div>
+        </div>
+    </div>
+
+    <!-- Modal pour l'inférence directe -->
+    <div id="inferenceModal" class="modal" role="dialog" aria-labelledby="modalInferenceTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeInferenceModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalInferenceTitle">Exécuter une inférence directe</h2>
+            
+            <div class="form-group">
+                <label for="modelSelect">Modèle:</label>
+                <select id="modelSelect" class="form-control" data-model-selector="true">
+                    <option value="loading">Chargement des modèles...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="promptInput">Prompt:</label>
+                <textarea id="promptInput" class="test-input" placeholder="Entrez votre prompt ici..." aria-label="Texte du prompt">Bonjour, peux-tu me dire qui tu es en 2-3 phrases?</textarea>
+                <div class="form-text">Utilisez Ctrl+Enter pour exécuter l'inférence</div>
+            </div>
+            
+            <div class="slider-container">
+                <label for="temperatureSlider">Température: <span id="temperatureValue">0.7</span></label>
+                <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.7" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.7">
+                <div class="slider-values">
+                    <span>0</span>
+                    <span>0.5</span>
+                    <span>1</span>
+                </div>
+            </div>
+            
+            <div class="slider-container">
+                <label for="maxTokensSlider">Tokens max: <span id="maxTokensValue">500</span></label>
+                <input type="range" id="maxTokensSlider" min="100" max="2000" step="100" value="500" aria-valuemin="100" aria-valuemax="2000" aria-valuenow="500">
+                <div class="slider-values">
+                    <span>100</span>
+                    <span>1000</span>
+                    <span>2000</span>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="runInferenceBtn">
+                    <i class="fas fa-brain" aria-hidden="true"></i> Exécuter l'inférence
+                </button>
+                <button class="btn btn-danger focus-visible" id="cancelInferenceBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour l'explorateur de fichiers -->
+    <div id="fileExplorerModal" class="modal" role="dialog" aria-labelledby="modalExplorerTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeFileExplorerModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalExplorerTitle">Explorateur de fichiers</h2>
+            
+            <div class="form-group">
+                <label for="currentDirInput">Répertoire actuel:</label>
+                <div class="input-group" style="margin-bottom: 10px;">
+                    <input type="text" id="currentDirInput" class="form-control" value="./" aria-label="Chemin du répertoire courant">
+                    <button class="btn execute-btn focus-visible" id="navigateBtn" aria-label="Naviguer">
+                        <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="fileListContainer" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 4px; padding: 10px;" role="region" aria-label="Liste des fichiers">
+                <div class="loading">
+                    <div class="loading-spinner" aria-hidden="true"></div>
+                    <span>Chargement des fichiers...</span>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn btn-danger focus-visible" id="closeFileExplorerBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast pour les notifications -->
+    <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/console.js') }}"></script>
+</body>
+</html>

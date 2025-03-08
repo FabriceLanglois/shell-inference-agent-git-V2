@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistant IA - Gestionnaire de modèles Ollama pour tester et gérer les modèles d'IA en local">
+    <meta name="theme-color" content="#0f172a">
+    <title>Assistant IA - Gestion Ollama</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ollama.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-theme="dark">
+    <header>
+        <div class="header-nav">
+            <a href="/">Console</a>
+            <a href="/ollama" class="active" aria-current="page">Gestion Ollama</a>
+        </div>
+        <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
+            <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="container">
+        <h1>Gestionnaire de Modèles Ollama</h1>
+        
+        <div class="terminal-info">
+            <div>
+                <span class="model-info" id="currentModel"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Modèle par défaut: chargement...</span>
+            </div>
+            <div class="gpu-info" id="gpuInfo">
+                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Chargement des informations GPU...
+            </div>
+        </div>
+
+        <div class="card" id="downloadCard">
+            <div class="card-title">
+                <i class="fas fa-download" aria-hidden="true"></i> Télécharger un nouveau modèle
+            </div>
+            
+            <div class="form-group">
+                <label for="modelInput">Nom du modèle à télécharger:</label>
+                <input type="text" id="modelInput" class="form-control" placeholder="Ex: llama3, mistral, phi3:mini..." aria-label="Nom du modèle">
+            </div>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle" aria-hidden="true"></i>
+                <div>
+                    <p>Les modèles populaires incluent: llama3, mistral, phi3:mini, gemma:2b, codegemma, etc.</p>
+                    <p>Pour plus d'informations, consultez la <a href="https://ollama.com/library" target="_blank" rel="noopener">bibliothèque Ollama</a>.</p>
+                </div>
+            </div>
+            
+            <button class="btn focus-visible" id="downloadModelBtn">
+                <i class="fas fa-cloud-download-alt" aria-hidden="true"></i> Télécharger le modèle
+            </button>
+        </div>
+
+        <div class="card" id="testCard">
+            <div class="card-title">
+                <i class="fas fa-vial" aria-hidden="true"></i> Test de modèle
+            </div>
+            
+            <div class="form-group">
+                <label for="testModelSelect">Sélectionnez un modèle:</label>
+                <select id="testModelSelect" class="form-control" data-model-selector="true">
+                    <option value="loading">Chargement des modèles...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="testPromptInput">Prompt de test:</label>
+                <textarea id="testPromptInput" class="test-input" placeholder="Entrez votre prompt de test..." aria-label="Texte du prompt">Bonjour, peux-tu me dire qui tu es en 2-3 phrases?</textarea>
+                <div class="form-text">Utilisez Ctrl+Enter pour lancer le test</div>
+            </div>
+            
+            <div class="slider-container">
+                <label for="temperatureSlider">Température: <span id="temperatureValue">0.7</span></label>
+                <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.7" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.7">
+                <div class="slider-values">
+                    <span>0</span>
+                    <span>0.5</span>
+                    <span>1</span>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <button class="btn focus-visible" id="testModelBtn">
+                    <i class="fas fa-vial" aria-hidden="true"></i> Tester le modèle
+                </button>
+            </div>
+            
+            <div id="testResult" class="test-result" style="display: none;" aria-live="polite">
+                <div class="test-header">Résultat du test:</div>
+                <div id="testResultContent"></div>
+            </div>
+        </div>
+
+        <div class="card" id="modelsCard">
+            <div class="card-title">
+                <i class="fas fa-list" aria-hidden="true"></i> Modèles disponibles
+            </div>
+            
+            <div id="modelLoadingSpinner" class="loading" aria-live="polite">
+                <div class="loading-spinner" aria-hidden="true"></div>
+                <span>Chargement des modèles...</span>
+            </div>
+            
+            <div id="modelGrid" class="model-grid" role="list" aria-label="Liste des modèles disponibles">
+                <!-- Les modèles seront chargés ici dynamiquement -->
+            </div>
+        </div>
+
+        <div class="card" id="statsCard">
+            <div class="card-title">
+                <i class="fas fa-chart-bar" aria-hidden="true"></i> Statistiques de performance
+            </div>
+            
+            <div class="flex-row">
+                <div style="flex: 1; min-width: 300px;">
+                    <div class="stats-card">
+                        <h3>Utilisation par modèle</h3>
+                        <img src="{{ url_for('static', filename='img/chart-placeholder.png') }}" alt="Graphique de performance" style="width: 100%; border-radius: 8px; margin: 15px 0;" aria-label="Graphique des statistiques d'utilisation">
+                    </div>
+                </div>
+                
+                <div style="flex: 1; min-width: 300px;">
+                    <div class="form-group">
+                        <label for="statsModelSelect">Filtrer par modèle:</label>
+                        <select id="statsModelSelect" class="form-control">
+                            <option value="all">Tous les modèles</option>
+                        </select>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">Inférences totales</div>
+                            <div class="stat-value" id="totalInferences">-</div>
+                            <div class="stat-unit">requêtes</div>
+                        </div>
+                        
+                        <div class="stat-item">
+                            <div class="stat-label">Temps moyen</div>
+                            <div class="stat-value" id="avgTime">-</div>
+                            <div class="stat-unit">secondes</div>
+                        </div>
+                        
+                        <div class="stat-item">
+                            <div class="stat-label">Tokens moyens</div>
+                            <div class="stat-value" id="avgTokens">-</div>
+                            <div class="stat-unit">par requête</div>
+                        </div>
+                        
+                        <div class="stat-item">
+                            <div class="stat-label">Mémoire estimée</div>
+                            <div class="stat-value" id="memoryUsage">-</div>
+                            <div class="stat-unit">MB</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmation -->
+    <div id="confirmModal" class="modal" role="dialog" aria-labelledby="confirmTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeConfirmModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="confirmTitle">Confirmation</h2>
+            <p class="modal-text" id="confirmText">Êtes-vous sûr de vouloir effectuer cette action?</p>
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="confirmYesBtn">
+                    <i class="fas fa-check" aria-hidden="true"></i> Oui
+                </button>
+                <button class="btn btn-danger focus-visible" id="confirmNoBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Non
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast pour les notifications -->
+    <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ollama.js') }}"></script>
+</body>
+</html>

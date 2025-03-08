@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Erreur serveur - Assistant IA">
+    <meta name="theme-color" content="#0f172a">
+    <title>Erreur serveur - Assistant IA</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .error-container {
+            text-align: center;
+            padding: 3rem 1rem;
+        }
+        
+        .error-code {
+            font-size: 8rem;
+            font-weight: 700;
+            color: var(--error-color);
+            margin: 0;
+            line-height: 1;
+            opacity: 0.7;
+        }
+        
+        .error-text {
+            font-size: 1.5rem;
+            margin: 1rem 0 2rem;
+            color: var(--text-color);
+        }
+        
+        .error-icon {
+            font-size: 5rem;
+            color: var(--error-color);
+            margin-bottom: 2rem;
+            opacity: 0.8;
+            animation: pulse 2s infinite;
+        }
+        
+        .home-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+        }
+        
+        .error-details {
+            background-color: var(--highlight-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 2rem auto;
+            max-width: 600px;
+            text-align: left;
+            border-left: 4px solid var(--error-color);
+        }
+    </style>
+</head>
+<body data-theme="dark">
+    <div class="container">
+        <div class="error-container">
+            <i class="fas fa-exclamation-triangle error-icon" aria-hidden="true"></i>
+            <h1 class="error-code">500</h1>
+            <p class="error-text">Erreur interne du serveur</p>
+            <p>Nous avons rencontré un problème lors du traitement de votre demande.</p>
+            
+            {% if error %}
+            <div class="error-details">
+                <h3>Détails de l'erreur:</h3>
+                <pre>{{ error }}</pre>
+            </div>
+            {% endif %}
+            
+            <a href="/" class="btn home-link">
+                <i class="fas fa-home" aria-hidden="true"></i> Retour à l'accueil
+            </a>
+            <br>
+            <button class="btn btn-secondary mt-4" onclick="window.location.reload()">
+                <i class="fas fa-sync" aria-hidden="true"></i> Rafraîchir la page
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Détecter le thème préféré de l'utilisateur
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.body.setAttribute('data-theme', savedTheme);
+    </script>
+</body>
+</html>
