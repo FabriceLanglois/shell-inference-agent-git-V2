@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistant IA - Éditeur de document avec assistance IA intégrée">
+    <meta name="theme-color" content="#0f172a">
+    <title>Assistant IA - Éditeur: {{ document.name }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/editor.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css" id="cmThemeLink">
+</head>
+<body data-theme="dark">
+    <header>
+        <div class="header-nav">
+            <a href="/">Console</a>
+            <a href="/ollama">Gestion Ollama</a>
+            <a href="/projects">Projets</a>
+            <a href="/github/settings">GitHub</a>
+        </div>
+        <a href="/project/{{ project_id }}" class="header-back">
+            <i class="fas fa-chevron-left"></i> Retour au projet
+        </a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
+            <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="container editor-container">
+        <div class="editor-header">
+            <div class="document-info">
+                <h1>
+                    <i class="fas fa-{{ 'file-code' if document.type == 'code' else 'file-alt' if document.type == 'text' else 'file-lines' }}"></i>
+                    {{ document.name }}
+                </h1>
+                <div class="document-meta">
+                    <span><i class="fas fa-calendar-alt"></i> Créé le: {{ document.created_at.split("T")[0] }}</span>
+                    <span><i class="fas fa-clock"></i> Mis à jour: {{ document.updated_at.split("T")[0] }}</span>
+                    <span><i class="fas fa-file-alt"></i> {{ document.size_formatted }}</span>
+                </div>
+            </div>
+            
+            <div class="editor-actions">
+                <button class="btn focus-visible" id="saveBtn">
+                    <i class="fas fa-save" aria-hidden="true"></i> Enregistrer
+                </button>
+                <button class="btn focus-visible" id="aiAssistBtn">
+                    <i class="fas fa-robot" aria-hidden="true"></i> Assistant IA
+                </button>
+                <div class="editor-settings">
+                    <button class="btn focus-visible" id="settingsBtn" aria-label="Paramètres de l'éditeur">
+                        <i class="fas fa-cog" aria-hidden="true"></i>
+                    </button>
+                    <div class="editor-settings-dropdown" id="editorSettingsDropdown">
+                        <div class="form-group">
+                            <label for="themeSelect">Thème de l'éditeur:</label>
+                            <select id="themeSelect" class="form-control">
+                                <option value="dracula">Dracula (sombre)</option>
+                                <option value="monokai">Monokai</option>
+                                <option value="material">Material</option>
+                                <option value="eclipse">Eclipse (clair)</option>
+                                <option value="idea">IntelliJ IDEA</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="fontSizeSelect">Taille de police:</label>
+                            <select id="fontSizeSelect" class="form-control">
+                                <option value="12">12px</option>
+                                <option value="14" selected>14px</option>
+                                <option value="16">16px</option>
+                                <option value="18">18px</option>
+                                <option value="20">20px</option>
+                            </select>
+                        </div>
+                        <div class="checkbox-group">
+                            <div class="checkbox-option">
+                                <input type="checkbox" id="lineNumbersCheck" checked>
+                                <label for="lineNumbersCheck">Numéros de ligne</label>
+                            </div>
+                            <div class="checkbox-option">
+                                <input type="checkbox" id="syntaxHighlightCheck" checked>
+                                <label for="syntaxHighlightCheck">Coloration syntaxique</label>
+                            </div>
+                            <div class="checkbox-option">
+                                <input type="checkbox" id="autoSaveCheck">
+                                <label for="autoSaveCheck">Sauvegarde automatique</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="editor-layout">
+            <div class="editor-wrapper">
+                <div id="editor"></div>
+            </div>
+            
+            <div class="editor-sidebar" id="aiSidebar">
+                <div class="sidebar-header">
+                    <h2><i class="fas fa-robot"></i> Assistant IA</h2>
+                    <button class="sidebar-close" id="closeSidebarBtn" aria-label="Fermer">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="sidebar-content">
+                    <div class="form-group">
+                        <label for="aiModelSelect">Modèle:</label>
+                        <select id="aiModelSelect" class="form-control" data-model-selector="true">
+                            <option value="loading">Chargement des modèles...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="sidebar-tabs">
+                        <div class="sidebar-tab active" data-tab="assist">Aide</div>
+                        <div class="sidebar-tab" data-tab="analyze">Analyser</div>
+                        <div class="sidebar-tab" data-tab="improve">Améliorer</div>
+                    </div>
+                    
+                    <div class="sidebar-tab-content active" id="assist-content">
+                        <div class="form-group">
+                            <label for="assistPromptInput">Que souhaitez-vous faire ?</label>
+                            <textarea id="assistPromptInput" class="form-control" placeholder="Ex: Comment implémenter une fonction de tri..."></textarea>
+                        </div>
+                        
+                        <button class="btn focus-visible" id="assistBtn">
+                            <i class="fas fa-question-circle"></i> Obtenir de l'aide
+                        </button>
+                    </div>
+                    
+                    <div class="sidebar-tab-content" id="analyze-content">
+                        <div class="form-group">
+                            <label for="analyzeTypeSelect">Type d'analyse:</label>
+                            <select id="analyzeTypeSelect" class="form-control">
+                                <option value="code">Qualité du code</option>
+                                <option value="bugs">Détection de bugs</option>
+                                <option value="structure">Structure du document</option>
+                                <option value="complexity">Complexité</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn focus-visible" id="analyzeBtn">
+                            <i class="fas fa-search"></i> Analyser
+                        </button>
+                    </div>
+                    
+                    <div class="sidebar-tab-content" id="improve-content">
+                        <div class="form-group">
+                            <label for="improveTypeSelect">Type d'amélioration:</label>
+                            <select id="improveTypeSelect" class="form-control">
+                                <option value="perf">Performance</option>
+                                <option value="doc">Documentation</option>
+                                <option value="refactor">Refactorisation</option>
+                                <option value="simplify">Simplification</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn focus-visible" id="improveBtn">
+                            <i class="fas fa-magic"></i> Améliorer
+                        </button>
+                    </div>
+                    
+                    <div class="ai-result" id="aiResult">
+                        <div class="empty-result">
+                            <i class="fas fa-robot"></i>
+                            <p>L'assistant est prêt</p>
+                            <p class="small">Utilisez les onglets ci-dessus pour interagir</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="editor-statusbar">
+            <div class="statusbar-left">
+                <span id="positionStatus">Ligne: 1, Col: 1</span>
+                <span id="documentTypeStatus">{{ document.type }} | {{ document.extension }}</span>
+            </div>
+            <div class="statusbar-right">
+                <span id="saveStatus">Document sauvegardé</span>
+                <span id="timeStatus">{{ document.updated_at.split("T")[0] }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de code suggéré -->
+    <div id="suggestedCodeModal" class="modal" role="dialog" aria-labelledby="modalCodeTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeSuggestedCodeModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalCodeTitle">Code suggéré</h2>
+            
+            <div class="suggestion-content">
+                <div class="form-group">
+                    <div id="suggestedCodeEditor"></div>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="insertCodeBtn">
+                    <i class="fas fa-check" aria-hidden="true"></i> Insérer ce code
+                </button>
+                <button class="btn btn-danger focus-visible" id="cancelInsertBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast pour les notifications -->
+    <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script>
+        // Passer l'ID du projet et le chemin du document au JavaScript
+        const PROJECT_ID = "{{ project_id }}";
+        const DOCUMENT_PATH = "{{ document.path }}";
+        const DOCUMENT_TYPE = "{{ document.type }}";
+        const DOCUMENT_EXTENSION = "{{ document.extension }}";
+        const INITIAL_CONTENT = `{{ content|safe }}`;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/markdown/markdown.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/shell/shell.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/yaml/yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closetag.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/comment/comment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/selection/active-line.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/search/search.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/search/searchcursor.min.js"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
+</body>
+</html>

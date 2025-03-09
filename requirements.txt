@@ -28,3 +28,7 @@ numpy>=1.25.2
 # Tests (optionnels pour le développement)
 pytest==7.4.0
 pytest-flask==1.2.0
+
+
+gitpython>=3.1.30
+requests>=2.28.2

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistant IA - Paramètres GitHub pour connecter vos projets à GitHub">
+    <meta name="theme-color" content="#0f172a">
+    <title>Assistant IA - Paramètres GitHub</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-theme="dark">
+    <header>
+        <div class="header-nav">
+            <a href="/">Console</a>
+            <a href="/ollama">Gestion Ollama</a>
+            <a href="/projects">Projets</a>
+            <a href="/github/settings" class="active" aria-current="page">GitHub</a>
+        </div>
+        <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
+            <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="container">
+        <h1><i class="fab fa-github"></i> Paramètres GitHub</h1>
+        
+        <div class="card" id="githubStatusCard">
+            <div class="card-title">
+                <i class="fas fa-plug" aria-hidden="true"></i> État de la connexion
+            </div>
+            
+            <div id="githubStatusContainer" class="github-status-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Vérification de la connexion GitHub...</span>
+                </div>
+            </div>
+            
+            <div id="githubConnectedInfo" style="display: none;">
+                <div class="github-user-info">
+                    <img src="" alt="Avatar GitHub" class="github-avatar" id="githubAvatar">
+                    <div class="github-user-details">
+                        <div class="github-user-name" id="githubUserName"></div>
+                        <div class="github-user-login" id="githubUserLogin"></div>
+                        <a href="#" target="_blank" id="githubProfileLink">Voir le profil</a>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn focus-visible" id="testConnectionBtn">
+                        <i class="fas fa-sync" aria-hidden="true"></i> Tester la connexion
+                    </button>
+                    <button class="btn btn-danger focus-visible" id="removeConnectionBtn">
+                        <i class="fas fa-unlink" aria-hidden="true"></i> Déconnecter GitHub
+                    </button>
+                </div>
+            </div>
+            
+            <div id="githubDisconnectedInfo" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle" aria-hidden="true"></i>
+                    <div>
+                        Vous n'êtes pas connecté à GitHub. Configurez vos identifiants pour pouvoir synchroniser vos projets.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="githubConfigCard">
+            <div class="card-title">
+                <i class="fas fa-cog" aria-hidden="true"></i> Configuration
+            </div>
+            
+            <div id="githubConfigForm">
+                <div class="form-group">
+                    <label for="githubUsernameInput">Nom d'utilisateur GitHub:</label>
+                    <input type="text" id="githubUsernameInput" class="form-control" placeholder="Nom d'utilisateur" aria-label="Nom d'utilisateur GitHub">
+                </div>
+                
+                <div class="form-group">
+                    <label for="githubTokenInput">Token d'accès personnel:</label>
+                    <input type="password" id="githubTokenInput" class="form-control" placeholder="ghp_..." aria-label="Token d'accès personnel GitHub">
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle" aria-hidden="true"></i>
+                    <div>
+                        <p>Pour créer un token d'accès personnel:</p>
+                        <ol>
+                            <li>Accédez à vos <a href="https://github.com/settings/tokens" target="_blank">paramètres GitHub</a></li>
+                            <li>Cliquez sur "Generate new token" (classic)</li>
+                            <li>Donnez un nom au token, par exemple "Assistant IA"</li>
+                            <li>Sélectionnez au minimum les autorisations suivantes:
+                                <ul>
+                                    <li><code>repo</code> - Accès complet aux dépôts</li>
+                                    <li><code>user</code> - Accès au profil</li>
+                                </ul>
+                            </li>
+                            <li>Cliquez sur "Generate token" et copiez-le ici</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn focus-visible" id="saveGithubConfigBtn">
+                        <i class="fas fa-save" aria-hidden="true"></i> Enregistrer
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="githubReposCard">
+            <div class="card-title">
+                <i class="fas fa-project-diagram" aria-hidden="true"></i> Projets liés à GitHub
+            </div>
+            
+            <div id="githubProjectsContainer" class="linked-projects-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Chargement des projets...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="githubTipsCard">
+            <div class="card-title">
+                <i class="fas fa-lightbulb" aria-hidden="true"></i> Conseils d'utilisation
+            </div>
+            
+            <div class="tips-container">
+                <div class="tip">
+                    <h3><i class="fas fa-sync"></i> Synchronisation bidirectionnelle</h3>
+                    <p>Les projets liés à GitHub peuvent être synchronisés dans les deux sens:</p>
+                    <ul>
+                        <li><strong>Pull</strong> - Récupère les dernières modifications depuis GitHub</li>
+                        <li><strong>Push</strong> - Envoie vos modifications locales vers GitHub</li>
+                    </ul>
+                </div>
+                
+                <div class="tip">
+                    <h3><i class="fas fa-code-branch"></i> Gestion des branches</h3>
+                    <p>Actuellement, seule la branche principale de chaque dépôt est gérée. Le support des branches multiples sera ajouté dans une future mise à jour.</p>
+                </div>
+                
+                <div class="tip">
+                    <h3><i class="fas fa-lock"></i> Sécurité</h3>
+                    <p>Votre token GitHub est stocké localement et n'est jamais partagé. Il est utilisé uniquement pour authentifier les requêtes vers l'API GitHub.</p>
+                </div>
+                
+                <div class="tip">
+                    <h3><i class="fas fa-question-circle"></i> Résolution des problèmes</h3>
+                    <p>Si vous rencontrez des problèmes de connexion:</p>
+                    <ul>
+                        <li>Vérifiez que votre token a les autorisations nécessaires</li>
+                        <li>Assurez-vous que votre token n'est pas expiré</li>
+                        <li>Testez la connexion avec le bouton "Tester la connexion"</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmation -->
+    <div id="confirmModal" class="modal" role="dialog" aria-labelledby="confirmTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeConfirmModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="confirmTitle">Confirmation</h2>
+            <p class="modal-text" id="confirmText">Êtes-vous sûr de vouloir effectuer cette action?</p>
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="confirmYesBtn">
+                    <i class="fas fa-check" aria-hidden="true"></i> Oui
+                </button>
+                <button class="btn btn-danger focus-visible" id="confirmNoBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Non
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast pour les notifications -->
+    <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/github.js') }}"></script>
+</body>
+</html>

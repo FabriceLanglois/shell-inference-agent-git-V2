@@ -1,0 +1,2612 @@
+/**
+ * Fonctions JavaScript pour la gestion des projets
+ * Assistant IA Ollama
+ */
+
+ // Gestionnaire principal de projets
+ const ProjectManager = {
+     // Configuration
+     config: {
+         maxRetries: 3,
+         retryDelay: 1000,
+         fileTypes: {
+             code: ['py', 'js', 'html', 'css', 'java', 'cpp', 'c', 'h', 'sh', 'ts', 'jsx', 'tsx', 'php'],
+             text: ['txt', 'md', 'markdown', 'rst', 'log', 'ini', 'csv', 'json', 'yml', 'yaml', 'xml'],
+             image: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'],
+             document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt']
+         }
+     },
+     
+     // État
+     state: {
+         projects: [],
+         currentProject: null,
+         currentFilesView: 'list', // 'list' ou 'grid'
+         currentTab: 'projects',   // 'projects', 'github', 'recent'
+         confirmCallback: null,
+         retryCount: 0
+     },
+     
+     // Éléments DOM
+     elements: {},
+     
+     /**
+      * Initialise le gestionnaire de projets
+      */
+     init: function() {
+         console.log('Initialisation du ProjectManager...');
+         
+         // Déterminer si on est sur la page principale ou la page de détail
+         const isProjectListPage = document.getElementById('projectsContainer') !== null;
+         const isProjectDetailPage = typeof PROJECT_ID !== 'undefined';
+         
+         // Récupérer les éléments communs
+         this.elements.toast = document.getElementById('toast');
+         this.elements.confirmModal = document.getElementById('confirmModal');
+         this.elements.confirmTitle = document.getElementById('confirmTitle');
+         this.elements.confirmText = document.getElementById('confirmText');
+         this.elements.confirmYesBtn = document.getElementById('confirmYesBtn');
+         this.elements.confirmNoBtn = document.getElementById('confirmNoBtn');
+         this.elements.closeConfirmModal = document.getElementById('closeConfirmModal');
+         
+         // Initialiser les gestionnaires d'événements pour le modal de confirmation
+         this._initConfirmModalEvents();
+         
+         // Initialiser la page appropriée
+         if (isProjectListPage) {
+             this._initProjectsListPage();
+         } else if (isProjectDetailPage) {
+             this._initProjectDetailPage();
+         }
+         
+         console.log('ProjectManager initialisé');
+     },
+     
+     /**
+      * Initialise la page de liste des projets
+      */
+     _initProjectsListPage: function() {
+         console.log('Initialisation de la page de liste des projets');
+         
+         // Récupérer les éléments DOM
+         this.elements.projectsContainer = document.getElementById('projectsContainer');
+         this.elements.createProjectBtn = document.getElementById('createProjectBtn');
+         this.elements.importFromGitHubBtn = document.getElementById('importFromGitHubBtn');
+         this.elements.importFromFolderBtn = document.getElementById('importFromFolderBtn');
+         this.elements.createProjectModal = document.getElementById('createProjectModal');
+         this.elements.closeCreateProjectModal = document.getElementById('closeCreateProjectModal');
+         this.elements.projectNameInput = document.getElementById('projectNameInput');
+         this.elements.projectDescriptionInput = document.getElementById('projectDescriptionInput');
+         this.elements.confirmCreateProjectBtn = document.getElementById('confirmCreateProjectBtn');
+         this.elements.cancelCreateProjectBtn = document.getElementById('cancelCreateProjectBtn');
+         this.elements.importGitHubModal = document.getElementById('importGitHubModal');
+         this.elements.closeImportGitHubModal = document.getElementById('closeImportGitHubModal');
+         this.elements.cancelImportGitHubBtn = document.getElementById('cancelImportGitHubBtn');
+         this.elements.githubAuthSection = document.getElementById('githubAuthSection');
+         this.elements.githubReposSection = document.getElementById('githubReposSection');
+         this.elements.repoSearchInput = document.getElementById('repoSearchInput');
+         this.elements.reposListContainer = document.getElementById('reposListContainer');
+         this.elements.importFolderModal = document.getElementById('importFolderModal');
+         this.elements.closeImportFolderModal = document.getElementById('closeImportFolderModal');
+         this.elements.folderPathInput = document.getElementById('folderPathInput');
+         this.elements.importProjectNameInput = document.getElementById('importProjectNameInput');
+         this.elements.importProjectDescriptionInput = document.getElementById('importProjectDescriptionInput');
+         this.elements.browseFolderBtn = document.getElementById('browseFolderBtn');
+         this.elements.confirmImportFolderBtn = document.getElementById('confirmImportFolderBtn');
+         this.elements.cancelImportFolderBtn = document.getElementById('cancelImportFolderBtn');
+         this.elements.tabButtons = document.querySelectorAll('.tab');
+         this.elements.githubInfo = document.getElementById('githubInfo');
+         
+         // Initialiser les gestionnaires d'événements
+         this._initProjectsListEvents();
+         
+         // Charger les projets
+         this.loadProjects();
+         
+         // Vérifier la connexion GitHub
+         this.checkGitHubConnection();
+         
+         console.log('Page de liste des projets initialisée');
+     },
+     
+     /**
+      * Initialise la page de détail d'un projet
+      */
+     _initProjectDetailPage: function() {
+         console.log('Initialisation de la page de détail du projet');
+         
+         // Stocker l'ID du projet
+         this.state.currentProject = PROJECT_ID;
+         
+         // Récupérer les éléments DOM
+         this.elements.fileListContainer = document.getElementById('fileListContainer');
+         this.elements.fileSearchInput = document.getElementById('fileSearchInput');
+         this.elements.viewOptions = document.querySelectorAll('.view-option');
+         this.elements.deleteProjectBtn = document.getElementById('deleteProjectBtn');
+         this.elements.createDocumentBtn = document.getElementById('createDocumentBtn');
+         this.elements.importFileBtn = document.getElementById('importFileBtn');
+         this.elements.tabButtons = document.querySelectorAll('.tab');
+         this.elements.tabContents = document.querySelectorAll('.tab-content');
+         this.elements.analysisModelSelect = document.getElementById('analysisModelSelect');
+         this.elements.analysisTypeSelect = document.getElementById('analysisTypeSelect');
+         this.elements.analysisDocumentSelect = document.getElementById('analysisDocumentSelect');
+         this.elements.analysisDocumentGroup = document.getElementById('analysisDocumentGroup');
+         this.elements.runAnalysisBtn = document.getElementById('runAnalysisBtn');
+         this.elements.analysisResultContainer = document.getElementById('analysisResultContainer');
+         this.elements.createDocumentModal = document.getElementById('createDocumentModal');
+         this.elements.closeCreateDocumentModal = document.getElementById('closeCreateDocumentModal');
+         this.elements.documentNameInput = document.getElementById('documentNameInput');
+         this.elements.documentTypeSelect = document.getElementById('documentTypeSelect');
+         this.elements.documentExtensionSelect = document.getElementById('documentExtensionSelect');
+         this.elements.confirmCreateDocumentBtn = document.getElementById('confirmCreateDocumentBtn');
+         this.elements.cancelCreateDocumentBtn = document.getElementById('cancelCreateDocumentBtn');
+         this.elements.importFileModal = document.getElementById('importFileModal');
+         this.elements.closeImportFileModal = document.getElementById('closeImportFileModal');
+         this.elements.importFilePathInput = document.getElementById('importFilePathInput');
+         this.elements.importFileTargetInput = document.getElementById('importFileTargetInput');
+         this.elements.browseFileBtn = document.getElementById('browseFileBtn');
+         this.elements.confirmImportFileBtn = document.getElementById('confirmImportFileBtn');
+         this.elements.cancelImportFileBtn = document.getElementById('cancelImportFileBtn');
+         
+         // Éléments GitHub
+         if (typeof HAS_GITHUB_REPO !== 'undefined' && HAS_GITHUB_REPO) {
+             this.elements.syncGitHubBtn = document.getElementById('syncGitHubBtn');
+             this.elements.pullChangesBtn = document.getElementById('pullChangesBtn');
+             this.elements.pushChangesBtn = document.getElementById('pushChangesBtn');
+             this.elements.currentBranchDisplay = document.getElementById('currentBranchDisplay');
+             this.elements.commitsListContainer = document.getElementById('commitsListContainer');
+             this.elements.syncGitHubModal = document.getElementById('syncGitHubModal');
+             this.elements.closeSyncGitHubModal = document.getElementById('closeSyncGitHubModal');
+             this.elements.commitMessageInput = document.getElementById('commitMessageInput');
+             this.elements.confirmPullBtn = document.getElementById('confirmPullBtn');
+             this.elements.confirmPushBtn = document.getElementById('confirmPushBtn');
+             this.elements.cancelSyncGitHubBtn = document.getElementById('cancelSyncGitHubBtn');
+             this.elements.gitStatusContent = document.getElementById('gitStatusContent');
+         } else {
+             this.elements.linkGitHubBtn = document.getElementById('linkGitHubBtn');
+             this.elements.linkGitHubModal = document.getElementById('linkGitHubModal');
+             this.elements.closeLinkGitHubModal = document.getElementById('closeLinkGitHubModal');
+             this.elements.githubLinkAuthSection = document.getElementById('githubLinkAuthSection');
+             this.elements.githubLinkOptionsSection = document.getElementById('githubLinkOptionsSection');
+             this.elements.existingRepoOption = document.getElementById('existingRepoOption');
+             this.elements.newRepoOption = document.getElementById('newRepoOption');
+             this.elements.existingRepoSection = document.getElementById('existingRepoSection');
+             this.elements.newRepoSection = document.getElementById('newRepoSection');
+             this.elements.linkRepoSearchInput = document.getElementById('linkRepoSearchInput');
+             this.elements.linkReposListContainer = document.getElementById('linkReposListContainer');
+             this.elements.newRepoNameInput = document.getElementById('newRepoNameInput');
+             this.elements.newRepoDescriptionInput = document.getElementById('newRepoDescriptionInput');
+             this.elements.privateRepoCheckbox = document.getElementById('privateRepoCheckbox');
+             this.elements.createAndLinkRepoBtn = document.getElementById('createAndLinkRepoBtn');
+             this.elements.cancelLinkGitHubBtn = document.getElementById('cancelLinkGitHubBtn');
+         }
+         
+         // Initialiser les gestionnaires d'événements
+         this._initProjectDetailEvents();
+         
+         // Charger les fichiers du projet
+         this.loadProjectFiles();
+         
+         // Initialiser la section d'analyse
+         this._initAnalysisSection();
+         
+         // Si le projet est lié à GitHub, initialiser la section correspondante
+         if (typeof HAS_GITHUB_REPO !== 'undefined' && HAS_GITHUB_REPO) {
+             this._initGitHubSection();
+         } else {
+             this._initGitHubLinkSection();
+         }
+         
+         console.log('Page de détail du projet initialisée');
+     },
+     
+     /**
+      * Initialise les gestionnaires d'événements pour le modal de confirmation
+      */
+     _initConfirmModalEvents: function() {
+         if (!this.elements.confirmModal) return;
+         
+         // Gestionnaire pour le bouton Oui
+         this.elements.confirmYesBtn.addEventListener('click', () => {
+             this.elements.confirmModal.style.display = 'none';
+             if (typeof this.state.confirmCallback === 'function') {
+                 this.state.confirmCallback();
+                 this.state.confirmCallback = null;
+             }
+         });
+         
+         // Gestionnaire pour le bouton Non
+         this.elements.confirmNoBtn.addEventListener('click', () => {
+             this.elements.confirmModal.style.display = 'none';
+             this.state.confirmCallback = null;
+         });
+         
+         // Gestionnaire pour le bouton de fermeture
+         this.elements.closeConfirmModal.addEventListener('click', () => {
+             this.elements.confirmModal.style.display = 'none';
+             this.state.confirmCallback = null;
+         });
+         
+         // Fermer le modal en cliquant à l'extérieur
+         window.addEventListener('click', (e) => {
+             if (e.target === this.elements.confirmModal) {
+                 this.elements.confirmModal.style.display = 'none';
+                 this.state.confirmCallback = null;
+             }
+         });
+     },
+     
+     /**
+      * Initialise les gestionnaires d'événements pour la page de liste des projets
+      */
+     _initProjectsListEvents: function() {
+         // Gestionnaire pour le bouton de création de projet
+         this.elements.createProjectBtn.addEventListener('click', () => {
+             this.showCreateProjectModal();
+         });
+         
+         // Gestionnaire pour le bouton d'importation depuis GitHub
+         this.elements.importFromGitHubBtn.addEventListener('click', () => {
+             this.showImportGitHubModal();
+         });
+         
+         // Gestionnaire pour le bouton d'importation depuis un dossier
+         this.elements.importFromFolderBtn.addEventListener('click', () => {
+             this.showImportFolderModal();
+         });
+         
+         // Gestionnaires pour le modal de création de projet
+         this.elements.closeCreateProjectModal.addEventListener('click', () => {
+             this.elements.createProjectModal.style.display = 'none';
+         });
+         
+         this.elements.confirmCreateProjectBtn.addEventListener('click', () => {
+             this.createProject();
+         });
+         
+         this.elements.cancelCreateProjectBtn.addEventListener('click', () => {
+             this.elements.createProjectModal.style.display = 'none';
+         });
+         
+         // Permettre la soumission en appuyant sur Entrée
+         this.elements.projectNameInput.addEventListener('keydown', (e) => {
+             if (e.key === 'Enter') {
+                 this.createProject();
+             }
+         });
+         
+         // Gestionnaires pour le modal d'importation GitHub
+         this.elements.closeImportGitHubModal.addEventListener('click', () => {
+             this.elements.importGitHubModal.style.display = 'none';
+         });
+         
+         this.elements.cancelImportGitHubBtn.addEventListener('click', () => {
+             this.elements.importGitHubModal.style.display = 'none';
+         });
+         
+         // Gestionnaire pour la recherche dans les dépôts
+         if (this.elements.repoSearchInput) {
+             this.elements.repoSearchInput.addEventListener('input', (e) => {
+                 this.filterRepositories(e.target.value);
+             });
+     },
+     
+     /**
+      * Pousse les changements locaux vers GitHub
+      */
+     pushChanges: function() {
+         if (!this.state.currentProject) return;
+         
+         const commitMessage = this.elements.commitMessageInput ? 
+             this.elements.commitMessageInput.value.trim() : 
+             "Mise à jour depuis Assistant IA";
+         
+         if (!commitMessage) {
+             showErrorToast('Un message de commit est requis');
+             return;
+         }
+         
+         // Afficher un toast de chargement
+         showToast('Push en cours... Cela peut prendre quelques instants.');
+         
+         // Fermer le modal si ouvert
+         if (this.elements.syncGitHubModal) {
+             this.elements.syncGitHubModal.style.display = 'none';
+         }
+         
+         // Faire la requête API
+         fetch(`/api/github/projects/${this.state.currentProject}/push`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ message: commitMessage })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du push des changements');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast('Changements poussés avec succès');
+                 
+                 // Recharger la liste des commits si visible
+                 if (this.elements.commitsListContainer && 
+                     this.elements.commitsListContainer.offsetParent !== null) {
+                     this.loadCommitHistory();
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors du push des changements:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Récupère les changements depuis GitHub
+      */
+     pullChanges: function() {
+         if (!this.state.currentProject) return;
+         
+         // Afficher un toast de chargement
+         showToast('Pull en cours... Cela peut prendre quelques instants.');
+         
+         // Fermer le modal si ouvert
+         if (this.elements.syncGitHubModal) {
+             this.elements.syncGitHubModal.style.display = 'none';
+         }
+         
+         // Faire la requête API
+         fetch(`/api/github/projects/${this.state.currentProject}/pull`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({})
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du pull des changements');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast('Changements récupérés avec succès');
+                 
+                 // Recharger la liste des fichiers
+                 this.loadProjectFiles();
+                 
+                 // Recharger la liste des commits si visible
+                 if (this.elements.commitsListContainer && 
+                     this.elements.commitsListContainer.offsetParent !== null) {
+                     this.loadCommitHistory();
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors du pull des changements:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Charge l'historique des commits
+      */
+     loadCommitHistory: function() {
+         if (!this.elements.commitsListContainer || !this.state.currentProject) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.commitsListContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Chargement de l'historique...</span>
+             </div>
+         `;
+         
+         // Exécuter la commande git log
+         const command = `cd "${PROJECT_PATH}" && git log --pretty=format:"%h|%an|%ad|%s" --date=short -n 10`;
+         
+         fetch('/execute', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ command })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.stderr) {
+                     throw new Error(data.stderr);
+                 }
+                 
+                 // Traiter la sortie
+                 const commits = data.stdout.split('\n').filter(line => line.trim() !== '');
+                 
+                 // Si aucun commit, afficher un message
+                 if (commits.length === 0) {
+                     this.elements.commitsListContainer.innerHTML = `
+                         <div class="empty-state">
+                             <i class="fas fa-history"></i>
+                             <p>Aucun commit trouvé</p>
+                             <p class="small">Créez ou poussez des commits pour les voir ici</p>
+                         </div>
+                     `;
+                     return;
+                 }
+                 
+                 // Construire le HTML
+                 let html = '';
+                 
+                 commits.forEach(commit => {
+                     const parts = commit.split('|');
+                     if (parts.length >= 4) {
+                         const [hash, author, date, message] = parts;
+                         
+                         html += `
+                             <div class="commit-item">
+                                 <div class="commit-header">
+                                     <div class="commit-title">${message}</div>
+                                     <div class="commit-hash">${hash}</div>
+                                 </div>
+                                 <div class="commit-meta">
+                                     <div class="commit-author">
+                                         <i class="fas fa-user"></i> ${author}
+                                     </div>
+                                     <div class="commit-date">
+                                         <i class="fas fa-calendar"></i> ${date}
+                                     </div>
+                                 </div>
+                             </div>
+                         `;
+                     }
+                 });
+                 
+                 // Mettre à jour le conteneur
+                 this.elements.commitsListContainer.innerHTML = html;
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement de l\'historique des commits:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.commitsListContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors du chargement de l'historique</p>
+                         <p class="small">${error.message}</p>
+                         <button class="btn" onclick="ProjectManager.loadCommitHistory()">
+                             <i class="fas fa-sync"></i> Réessayer
+                         </button>
+                     </div>
+                 `;
+             });
+     },
+     
+     /**
+      * Obtient la branche actuelle
+      */
+     getCurrentBranch: function() {
+         if (!this.elements.currentBranchDisplay || !this.state.currentProject) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.currentBranchDisplay.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+         
+         // Exécuter la commande git branch
+         const command = `cd "${PROJECT_PATH}" && git branch --show-current`;
+         
+         fetch('/execute', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ command })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.stderr) {
+                     throw new Error(data.stderr);
+                 }
+                 
+                 // Mettre à jour l'affichage
+                 const branch = data.stdout.trim() || 'unknown';
+                 this.elements.currentBranchDisplay.innerHTML = branch;
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la récupération de la branche actuelle:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.currentBranchDisplay.innerHTML = 'Erreur';
+             });
+     },
+     
+     /**
+      * Importe un projet depuis un dossier
+      */
+     browseFolder: function() {
+         // Simuler un explorateur avec la console
+         this.elements.folderPathInput.value = '/chemin/vers/dossier';
+         showToast('Cette fonctionnalité utilise la console. Entrez le chemin complet du dossier.');
+     },
+     
+     /**
+      * Importe un projet depuis un dossier
+      */
+     importFolder: function() {
+         const sourcePath = this.elements.folderPathInput.value.trim();
+         const name = this.elements.importProjectNameInput.value.trim();
+         const description = this.elements.importProjectDescriptionInput.value.trim();
+         
+         // Valider le chemin source
+         if (!sourcePath) {
+             showErrorToast('Le chemin du dossier est obligatoire');
+             return;
+         }
+         
+         // Valider le nom
+         if (!name) {
+             showErrorToast('Le nom du projet est obligatoire');
+             return;
+         }
+         
+         // Désactiver le bouton pendant l'importation
+         this.elements.confirmImportFolderBtn.disabled = true;
+         this.elements.confirmImportFolderBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importation...';
+         
+         // Faire la requête API
+         fetch('/api/projects/import-folder', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ source_path: sourcePath, name, description })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de l\'importation du dossier');
+                 }
+                 
+                 // Fermer le modal
+                 this.elements.importFolderModal.style.display = 'none';
+                 
+                 // Afficher un toast de succès
+                 showToast(`Projet "${name}" importé avec succès`);
+                 
+                 // Rediriger vers la page du projet
+                 window.location.href = `/project/${data.project.id}`;
+             })
+             .catch(error => {
+                 console.error('Erreur lors de l\'importation du dossier:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+                 
+                 // Réactiver le bouton
+                 this.elements.confirmImportFolderBtn.disabled = false;
+                 this.elements.confirmImportFolderBtn.innerHTML = '<i class="fas fa-file-import"></i> Importer';
+             });
+     }
+ };
+ 
+ // Fonctions d'utilitaires globales
+ 
+ /**
+  * Affiche un toast de notification
+  * @param {string} message - Message à afficher
+  * @param {number} duration - Durée d'affichage en ms (optionnel)
+  */
+ function showToast(message, duration = 3000) {
+     const toast = document.getElementById('toast');
+     if (!toast) return;
+     
+     // Définir le message
+     toast.textContent = message;
+     toast.className = 'toast show';
+     
+     // Masquer après la durée spécifiée
+     setTimeout(() => {
+         toast.className = 'toast';
+     }, duration);
+ }
+ 
+ /**
+  * Affiche un toast d'erreur
+  * @param {string} message - Message d'erreur à afficher
+  * @param {number} duration - Durée d'affichage en ms (optionnel)
+  */
+ function showErrorToast(message, duration = 4000) {
+     const toast = document.getElementById('toast');
+     if (!toast) return;
+     
+     // Définir le message
+     toast.textContent = message;
+     toast.className = 'toast show error';
+     
+     // Masquer après la durée spécifiée
+     setTimeout(() => {
+         toast.className = 'toast';
+     }, duration);
+ }
+ 
+ /**
+  * Charge la liste des modèles disponibles
+  * @param {string} selectId - ID de l'élément select à remplir
+  */
+ function loadModelsList(selectId) {
+     const select = document.getElementById(selectId);
+     if (!select) return;
+     
+     // Afficher l'option de chargement
+     select.innerHTML = '<option value="loading">Chargement des modèles...</option>';
+     
+     // Faire la requête API
+     fetch('/api/models')
+         .then(response => {
+             if (!response.ok) {
+                 throw new Error(`Erreur HTTP: ${response.status}`);
+             }
+             return response.json();
+         })
+         .then(data => {
+             // Vider la liste
+             select.innerHTML = '';
+             
+             if (data.length === 0) {
+                 // Aucun modèle disponible
+                 select.innerHTML = '<option value="none">Aucun modèle disponible</option>';
+                 return;
+             }
+             
+             // Ajouter les modèles
+             data.forEach(model => {
+                 const option = document.createElement('option');
+                 option.value = model.name;
+                 option.textContent = `${model.name} (${model.size_formatted})`;
+                 
+                 if (model.is_default) {
+                     option.selected = true;
+                     option.textContent += ' - Défaut';
+                 }
+                 
+                 select.appendChild(option);
+             });
+         })
+         .catch(error => {
+             console.error('Erreur lors du chargement des modèles:', error);
+             select.innerHTML = '<option value="error">Erreur de chargement</option>';
+         });
+ }
+ 
+ // Initialiser le gestionnaire de projets quand le DOM est chargé
+ document.addEventListener('DOMContentLoaded', function() {
+     ProjectManager.init();
+ });
+         }
+         
+         // Gestionnaires pour le modal d'importation de dossier
+         this.elements.closeImportFolderModal.addEventListener('click', () => {
+             this.elements.importFolderModal.style.display = 'none';
+         });
+         
+         this.elements.browseFolderBtn.addEventListener('click', () => {
+             this.browseFolder();
+         });
+         
+         this.elements.confirmImportFolderBtn.addEventListener('click', () => {
+             this.importFolder();
+         });
+         
+         this.elements.cancelImportFolderBtn.addEventListener('click', () => {
+             this.elements.importFolderModal.style.display = 'none';
+         });
+         
+         // Gestionnaires pour les tabs
+         this.elements.tabButtons.forEach(tab => {
+             tab.addEventListener('click', () => {
+                 this.switchTab(tab.dataset.tab);
+             });
+         });
+     },
+     
+     /**
+      * Initialise les gestionnaires d'événements pour la page de détail d'un projet
+      */
+     _initProjectDetailEvents: function() {
+         // Gestionnaires pour la recherche de fichiers
+         this.elements.fileSearchInput.addEventListener('input', (e) => {
+             this.filterFiles(e.target.value);
+         });
+         
+         // Gestionnaires pour les options de vue
+         this.elements.viewOptions.forEach(option => {
+             option.addEventListener('click', () => {
+                 this.switchFileView(option.dataset.view);
+             });
+         });
+         
+         // Gestionnaire pour le bouton de suppression de projet
+         this.elements.deleteProjectBtn.addEventListener('click', () => {
+             this.confirmDeleteProject();
+         });
+         
+         // Gestionnaire pour le bouton de création de document
+         this.elements.createDocumentBtn.addEventListener('click', () => {
+             this.showCreateDocumentModal();
+         });
+         
+         // Gestionnaire pour le bouton d'importation de fichier
+         this.elements.importFileBtn.addEventListener('click', () => {
+             this.showImportFileModal();
+         });
+         
+         // Gestionnaires pour les tabs
+         this.elements.tabButtons.forEach(tab => {
+             tab.addEventListener('click', () => {
+                 this.switchDetailTab(tab.dataset.tab);
+             });
+         });
+         
+         // Gestionnaires pour le modal de création de document
+         this.elements.closeCreateDocumentModal.addEventListener('click', () => {
+             this.elements.createDocumentModal.style.display = 'none';
+         });
+         
+         this.elements.confirmCreateDocumentBtn.addEventListener('click', () => {
+             this.createDocument();
+         });
+         
+         this.elements.cancelCreateDocumentBtn.addEventListener('click', () => {
+             this.elements.createDocumentModal.style.display = 'none';
+         });
+         
+         // Gestionnaires pour le modal d'importation de fichier
+         this.elements.closeImportFileModal.addEventListener('click', () => {
+             this.elements.importFileModal.style.display = 'none';
+         });
+         
+         this.elements.browseFileBtn.addEventListener('click', () => {
+             this.browseFile();
+         });
+         
+         this.elements.confirmImportFileBtn.addEventListener('click', () => {
+             this.importFile();
+         });
+         
+         this.elements.cancelImportFileBtn.addEventListener('click', () => {
+             this.elements.importFileModal.style.display = 'none';
+         });
+         
+         // Gestionnaires spécifiques à GitHub
+         if (typeof HAS_GITHUB_REPO !== 'undefined' && HAS_GITHUB_REPO) {
+             this._initGitHubDetailEvents();
+         } else if (this.elements.linkGitHubBtn) {
+             this._initGitHubLinkEvents();
+         }
+     },
+     
+     /**
+      * Initialise les gestionnaires d'événements pour la section GitHub (projet lié)
+      */
+     _initGitHubDetailEvents: function() {
+         // Gestionnaire pour le bouton de synchronisation GitHub
+         this.elements.syncGitHubBtn.addEventListener('click', () => {
+             this.showSyncGitHubModal();
+         });
+         
+         // Gestionnaires pour le modal de synchronisation
+         this.elements.closeSyncGitHubModal.addEventListener('click', () => {
+             this.elements.syncGitHubModal.style.display = 'none';
+         });
+         
+         this.elements.confirmPullBtn.addEventListener('click', () => {
+             this.pullChanges();
+         });
+         
+         this.elements.confirmPushBtn.addEventListener('click', () => {
+             this.pushChanges();
+         });
+         
+         this.elements.cancelSyncGitHubBtn.addEventListener('click', () => {
+             this.elements.syncGitHubModal.style.display = 'none';
+         });
+         
+         // Gestionnaires pour les boutons de la section Commits
+         this.elements.pullChangesBtn.addEventListener('click', () => {
+             this.pullChanges();
+         });
+         
+         this.elements.pushChangesBtn.addEventListener('click', () => {
+             this.pushChanges();
+         });
+     },
+     
+     /**
+      * Initialise les gestionnaires d'événements pour la liaison GitHub (projet non lié)
+      */
+     _initGitHubLinkEvents: function() {
+         // Gestionnaire pour le bouton de liaison GitHub
+         this.elements.linkGitHubBtn.addEventListener('click', () => {
+             this.showLinkGitHubModal();
+         });
+         
+         // Gestionnaires pour le modal de liaison
+         this.elements.closeLinkGitHubModal.addEventListener('click', () => {
+             this.elements.linkGitHubModal.style.display = 'none';
+         });
+         
+         this.elements.cancelLinkGitHubBtn.addEventListener('click', () => {
+             this.elements.linkGitHubModal.style.display = 'none';
+         });
+         
+         // Gestionnaires pour les options de liaison
+         this.elements.existingRepoOption.addEventListener('change', () => {
+             this.toggleLinkOptions();
+         });
+         
+         this.elements.newRepoOption.addEventListener('change', () => {
+             this.toggleLinkOptions();
+         });
+         
+         // Gestionnaire pour la recherche de dépôts
+         this.elements.linkRepoSearchInput.addEventListener('input', (e) => {
+             this.filterLinkRepositories(e.target.value);
+         });
+         
+         // Gestionnaire pour le bouton de création et liaison
+         this.elements.createAndLinkRepoBtn.addEventListener('click', () => {
+             this.createAndLinkRepo();
+         });
+     },
+     
+     /**
+      * Initialise la section d'analyse
+      */
+     _initAnalysisSection: function() {
+         // Charger les modèles d'IA
+         loadModelsList('analysisModelSelect');
+         
+         // Gestionnaire pour le type d'analyse
+         this.elements.analysisTypeSelect.addEventListener('change', () => {
+             this.updateAnalysisOptions();
+         });
+         
+         // Gestionnaire pour le bouton d'analyse
+         this.elements.runAnalysisBtn.addEventListener('click', () => {
+             this.runAnalysis();
+         });
+         
+         // Initialiser les options d'analyse
+         this.updateAnalysisOptions();
+     },
+     
+     /**
+      * Initialise la section GitHub pour les projets liés
+      */
+     _initGitHubSection: function() {
+         // Charger l'historique des commits
+         this.loadCommitHistory();
+         
+         // Obtenir la branche actuelle
+         this.getCurrentBranch();
+     },
+     
+     /**
+      * Initialise la section de liaison GitHub pour les projets non liés
+      */
+     _initGitHubLinkSection: function() {
+         // Vérifier la connexion GitHub
+         this.checkGitHubConnectionForLink();
+     },
+     
+     /**
+      * Charge la liste des projets depuis l'API
+      */
+     loadProjects: function() {
+         if (!this.elements.projectsContainer) return;
+         
+         // Montrer le chargement
+         this.elements.projectsContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Chargement des projets...</span>
+             </div>
+         `;
+         
+         // Faire la requête API
+         fetch('/api/projects')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du chargement des projets');
+                 }
+                 
+                 // Stocker les projets
+                 this.state.projects = data.projects;
+                 
+                 // Afficher les projets
+                 this.renderProjects();
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement des projets:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.projectsContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors du chargement des projets</p>
+                         <p class="small">${error.message}</p>
+                         <button class="btn" onclick="ProjectManager.loadProjects()">
+                             <i class="fas fa-sync"></i> Réessayer
+                         </button>
+                     </div>
+                 `;
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast('Erreur lors du chargement des projets');
+             });
+     },
+     
+     /**
+      * Affiche les projets en fonction du filtre actuel
+      */
+     renderProjects: function() {
+         if (!this.elements.projectsContainer || !this.state.projects) return;
+         
+         // Filtrer les projets en fonction de l'onglet actuel
+         let filteredProjects = [...this.state.projects];
+         
+         if (this.state.currentTab === 'github') {
+             // Filtrer les projets liés à GitHub
+             filteredProjects = filteredProjects.filter(project => project.github_repo);
+         } else if (this.state.currentTab === 'recent') {
+             // Trier par date de mise à jour (récents en premier)
+             filteredProjects.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+             // Limiter aux 6 plus récents
+             filteredProjects = filteredProjects.slice(0, 6);
+         }
+         
+         // Si aucun projet, afficher un message
+         if (filteredProjects.length === 0) {
+             this.elements.projectsContainer.innerHTML = `
+                 <div class="empty-state">
+                     <i class="fas fa-folder-open"></i>
+                     <p>Aucun projet trouvé</p>
+                     <p class="small">Créez un nouveau projet ou importez-en un depuis GitHub ou un dossier local</p>
+                     <button class="btn" onclick="ProjectManager.showCreateProjectModal()">
+                         <i class="fas fa-plus-circle"></i> Nouveau projet
+                     </button>
+                 </div>
+             `;
+             return;
+         }
+         
+         // Construire le HTML des projets
+         let projectsHTML = '';
+         
+         filteredProjects.forEach(project => {
+             const createdDate = new Date(project.created_at).toLocaleDateString();
+             const updatedDate = new Date(project.updated_at).toLocaleDateString();
+             
+             projectsHTML += `
+                 <div class="project-card" data-id="${project.id}">
+                     <div class="project-card-header">
+                         <div class="project-card-title">
+                             <i class="fas fa-folder"></i> ${project.name}
+                         </div>
+                         ${project.github_repo ? `<div class="github-badge"><i class="fab fa-github"></i> GitHub</div>` : ''}
+                     </div>
+                     <div class="project-card-body">
+                         <div class="project-card-description">${project.description || 'Aucune description'}</div>
+                         <div class="project-card-meta">
+                             <span><i class="fas fa-calendar"></i> Créé: ${createdDate}</span>
+                             <span><i class="fas fa-clock"></i> Mis à jour: ${updatedDate}</span>
+                         </div>
+                     </div>
+                     <div class="project-card-footer">
+                         <a href="/project/${project.id}" class="btn">
+                             <i class="fas fa-folder-open"></i> Ouvrir
+                         </a>
+                         <button class="btn btn-danger" onclick="ProjectManager.confirmDeleteProject('${project.id}')">
+                             <i class="fas fa-trash"></i>
+                         </button>
+                     </div>
+                 </div>
+             `;
+         });
+         
+         // Mettre à jour le conteneur
+         this.elements.projectsContainer.innerHTML = projectsHTML;
+         
+         // Ajouter des gestionnaires d'événements pour les cartes
+         document.querySelectorAll('.project-card').forEach(card => {
+             card.addEventListener('click', (e) => {
+                 // Éviter d'ouvrir le projet si on clique sur un bouton
+                 if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'A' || e.target.closest('a')) {
+                     return;
+                 }
+                 
+                 // Ouvrir le projet
+                 window.location.href = `/project/${card.dataset.id}`;
+             });
+         });
+     },
+     
+     /**
+      * Affiche le modal de création de projet
+      */
+     showCreateProjectModal: function() {
+         if (!this.elements.createProjectModal) return;
+         
+         // Réinitialiser les champs
+         this.elements.projectNameInput.value = '';
+         this.elements.projectDescriptionInput.value = '';
+         
+         // Afficher le modal
+         this.elements.createProjectModal.style.display = 'block';
+         
+         // Focus sur le champ de nom
+         setTimeout(() => {
+             this.elements.projectNameInput.focus();
+         }, 100);
+     },
+     
+     /**
+      * Crée un nouveau projet
+      */
+     createProject: function() {
+         const name = this.elements.projectNameInput.value.trim();
+         const description = this.elements.projectDescriptionInput.value.trim();
+         
+         // Valider le nom
+         if (!name) {
+             showErrorToast('Le nom du projet est obligatoire');
+             return;
+         }
+         
+         // Désactiver le bouton pendant la création
+         this.elements.confirmCreateProjectBtn.disabled = true;
+         this.elements.confirmCreateProjectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+         
+         // Faire la requête API
+         fetch('/api/projects', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ name, description })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la création du projet');
+                 }
+                 
+                 // Fermer le modal
+                 this.elements.createProjectModal.style.display = 'none';
+                 
+                 // Afficher un toast de succès
+                 showToast(`Projet "${name}" créé avec succès`);
+                 
+                 // Rediriger vers la page du projet
+                 window.location.href = `/project/${data.project.id}`;
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la création du projet:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+                 
+                 // Réactiver le bouton
+                 this.elements.confirmCreateProjectBtn.disabled = false;
+                 this.elements.confirmCreateProjectBtn.innerHTML = '<i class="fas fa-check"></i> Créer le projet';
+             });
+     },
+     
+     /**
+      * Affiche une confirmation de suppression de projet
+      * @param {string} projectId - ID du projet à supprimer (facultatif)
+      */
+     confirmDeleteProject: function(projectId = null) {
+         // Si projectId est fourni, c'est une demande depuis la page de liste
+         // Sinon, c'est une demande depuis la page de détail, utiliser l'ID courant
+         const id = projectId || this.state.currentProject;
+         
+         if (!id) return;
+         
+         // Configurer le modal de confirmation
+         this.elements.confirmTitle.textContent = 'Supprimer le projet';
+         this.elements.confirmText.textContent = 'Êtes-vous sûr de vouloir supprimer ce projet ? Cette action est irréversible.';
+         
+         // Configurer le callback
+         this.state.confirmCallback = () => {
+             this.deleteProject(id);
+         };
+         
+         // Afficher le modal
+         this.elements.confirmModal.style.display = 'block';
+     },
+     
+     /**
+      * Supprime un projet
+      * @param {string} projectId - ID du projet à supprimer
+      */
+     deleteProject: function(projectId) {
+         if (!projectId) return;
+         
+         // Faire la requête API
+         fetch(`/api/projects/${projectId}`, {
+             method: 'DELETE'
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la suppression du projet');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast('Projet supprimé avec succès');
+                 
+                 // Si on est sur la page de détail, rediriger vers la liste
+                 if (this.state.currentProject === projectId) {
+                     window.location.href = '/projects';
+                 } else {
+                     // Sinon, recharger la liste des projets
+                     this.loadProjects();
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la suppression du projet:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Charge les fichiers d'un projet
+      */
+     loadProjectFiles: function() {
+         if (!this.elements.fileListContainer || !this.state.currentProject) return;
+         
+         // Montrer le chargement
+         this.elements.fileListContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Chargement des fichiers...</span>
+             </div>
+         `;
+         
+         // Faire la requête API
+         fetch(`/api/projects/${this.state.currentProject}/files`)
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du chargement des fichiers');
+                 }
+                 
+                 // Mettre à jour la liste des documents dans la section d'analyse
+                 this.updateDocumentList(data.files);
+                 
+                 // Afficher les fichiers
+                 this.renderFiles(data.files);
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement des fichiers:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.fileListContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors du chargement des fichiers</p>
+                         <p class="small">${error.message}</p>
+                         <button class="btn" onclick="ProjectManager.loadProjectFiles()">
+                             <i class="fas fa-sync"></i> Réessayer
+                         </button>
+                     </div>
+                 `;
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast('Erreur lors du chargement des fichiers');
+             });
+     },
+     
+     /**
+      * Affiche les fichiers d'un projet
+      * @param {Array} files - Liste des fichiers
+      */
+     renderFiles: function(files) {
+         if (!this.elements.fileListContainer) return;
+         
+         // Si aucun fichier, afficher un message
+         if (!files || files.length === 0) {
+             this.elements.fileListContainer.innerHTML = `
+                 <div class="empty-state">
+                     <i class="fas fa-file-alt"></i>
+                     <p>Aucun fichier trouvé</p>
+                     <p class="small">Créez un nouveau document ou importez des fichiers</p>
+                     <button class="btn" onclick="ProjectManager.showCreateDocumentModal()">
+                         <i class="fas fa-file-plus"></i> Nouveau document
+                     </button>
+                 </div>
+             `;
+             return;
+         }
+         
+         // Utiliser la vue appropriée
+         if (this.state.currentFilesView === 'list') {
+             this.renderFilesListView(files);
+         } else {
+             this.renderFilesGridView(files);
+         }
+     },
+     
+     /**
+      * Affiche les fichiers en vue liste
+      * @param {Array} files - Liste des fichiers
+      */
+     renderFilesListView: function(files) {
+         if (!this.elements.fileListContainer) return;
+         
+         // Construire le HTML
+         let html = `
+             <div class="file-list">
+                 <div class="file-list-header">
+                     <div>Type</div>
+                     <div>Nom</div>
+                     <div>Taille</div>
+                     <div>Actions</div>
+                 </div>
+         `;
+         
+         files.forEach(file => {
+             // Déterminer l'icône en fonction du type de fichier
+             let icon = 'file-alt';
+             
+             if (file.type === 'code') {
+                 icon = 'file-code';
+             } else if (file.type === 'markdown') {
+                 icon = 'file-lines';
+             } else if (file.type === 'image') {
+                 icon = 'file-image';
+             } else if (file.type === 'document') {
+                 icon = 'file-pdf';
+             }
+             
+             html += `
+                 <div class="file-item" data-path="${file.path}">
+                     <div class="file-icon"><i class="fas fa-${icon}"></i></div>
+                     <div class="file-name">${file.name}</div>
+                     <div class="file-size">${file.size_formatted}</div>
+                     <div class="file-actions">
+                         <button class="file-action-btn" title="Analyser" onclick="ProjectManager.analyzeFile('${file.path}')">
+                             <i class="fas fa-brain"></i>
+                         </button>
+                         <button class="file-action-btn" title="Supprimer" onclick="ProjectManager.confirmDeleteFile('${file.path}')">
+                             <i class="fas fa-trash"></i>
+                         </button>
+                     </div>
+                 </div>
+             `;
+         });
+         
+         html += '</div>';
+         
+         // Mettre à jour le conteneur
+         this.elements.fileListContainer.innerHTML = html;
+         
+         // Ajouter des gestionnaires d'événements pour les fichiers
+         document.querySelectorAll('.file-item').forEach(item => {
+             item.addEventListener('click', (e) => {
+                 // Éviter d'ouvrir le fichier si on clique sur un bouton
+                 if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                     return;
+                 }
+                 
+                 // Ouvrir le fichier
+                 window.location.href = `/project/${this.state.currentProject}/document/${item.dataset.path}`;
+             });
+         });
+     },
+     
+     /**
+      * Affiche les fichiers en vue grille
+      * @param {Array} files - Liste des fichiers
+      */
+     renderFilesGridView: function(files) {
+         if (!this.elements.fileListContainer) return;
+         
+         // Construire le HTML
+         let html = '<div class="file-grid">';
+         
+         files.forEach(file => {
+             // Déterminer l'icône en fonction du type de fichier
+             let icon = 'file-alt';
+             
+             if (file.type === 'code') {
+                 icon = 'file-code';
+             } else if (file.type === 'markdown') {
+                 icon = 'file-lines';
+             } else if (file.type === 'image') {
+                 icon = 'file-image';
+             } else if (file.type === 'document') {
+                 icon = 'file-pdf';
+             }
+             
+             html += `
+                 <div class="grid-file-item" data-path="${file.path}">
+                     <div class="grid-file-icon"><i class="fas fa-${icon}"></i></div>
+                     <div class="grid-file-name">${file.name}</div>
+                     <div class="grid-file-meta">${file.size_formatted}</div>
+                 </div>
+             `;
+         });
+         
+         html += '</div>';
+         
+         // Mettre à jour le conteneur
+         this.elements.fileListContainer.innerHTML = html;
+         
+         // Ajouter des gestionnaires d'événements pour les fichiers
+         document.querySelectorAll('.grid-file-item').forEach(item => {
+             item.addEventListener('click', () => {
+                 // Ouvrir le fichier
+                 window.location.href = `/project/${this.state.currentProject}/document/${item.dataset.path}`;
+             });
+         });
+     },
+     
+     /**
+      * Filtre les fichiers en fonction d'un terme de recherche
+      * @param {string} searchTerm - Terme de recherche
+      */
+     filterFiles: function(searchTerm) {
+         if (!this.elements.fileListContainer) return;
+         
+         searchTerm = searchTerm.toLowerCase();
+         
+         // Filtrer les éléments visibles
+         if (this.state.currentFilesView === 'list') {
+             document.querySelectorAll('.file-item').forEach(item => {
+                 const fileName = item.querySelector('.file-name').textContent.toLowerCase();
+                 item.style.display = fileName.includes(searchTerm) ? 'grid' : 'none';
+             });
+         } else {
+             document.querySelectorAll('.grid-file-item').forEach(item => {
+                 const fileName = item.querySelector('.grid-file-name').textContent.toLowerCase();
+                 item.style.display = fileName.includes(searchTerm) ? 'flex' : 'none';
+             });
+         }
+     },
+     
+     /**
+      * Change la vue des fichiers (liste ou grille)
+      * @param {string} view - Type de vue ('list' ou 'grid')
+      */
+     switchFileView: function(view) {
+         if (!this.elements.viewOptions || (view !== 'list' && view !== 'grid')) return;
+         
+         // Mettre à jour l'état
+         this.state.currentFilesView = view;
+         
+         // Mettre à jour les boutons
+         this.elements.viewOptions.forEach(option => {
+             option.classList.toggle('active', option.dataset.view === view);
+         });
+         
+         // Rafraîchir l'affichage des fichiers
+         fetch(`/api/projects/${this.state.currentProject}/files`)
+             .then(response => response.json())
+             .then(data => {
+                 if (data.success) {
+                     this.renderFiles(data.files);
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement des fichiers:', error);
+             });
+     },
+     
+     /**
+      * Change l'onglet actif dans la page de détail
+      * @param {string} tabId - ID de l'onglet
+      */
+     switchDetailTab: function(tabId) {
+         if (!this.elements.tabButtons || !this.elements.tabContents) return;
+         
+         // Mettre à jour les boutons
+         this.elements.tabButtons.forEach(tab => {
+             tab.classList.toggle('active', tab.dataset.tab === tabId);
+         });
+         
+         // Mettre à jour les contenus
+         this.elements.tabContents.forEach(content => {
+             content.classList.toggle('active', content.id === `${tabId}-content`);
+         });
+         
+         // Charger le contenu spécifique de l'onglet si nécessaire
+         if (tabId === 'commits' && this.elements.commitsListContainer) {
+             this.loadCommitHistory();
+         }
+     },
+     
+     /**
+      * Change l'onglet actif dans la page de liste
+      * @param {string} tabId - ID de l'onglet
+      */
+     switchTab: function(tabId) {
+         if (!this.elements.tabButtons) return;
+         
+         // Mettre à jour l'état
+         this.state.currentTab = tabId;
+         
+         // Mettre à jour les boutons
+         this.elements.tabButtons.forEach(tab => {
+             tab.classList.toggle('active', tab.dataset.tab === tabId);
+         });
+         
+         // Rafraîchir l'affichage des projets
+         this.renderProjects();
+     },
+     
+     /**
+      * Affiche le modal de création de document
+      */
+     showCreateDocumentModal: function() {
+         if (!this.elements.createDocumentModal) return;
+         
+         // Réinitialiser les champs
+         this.elements.documentNameInput.value = '';
+         this.elements.documentTypeSelect.value = 'code';
+         this.elements.documentExtensionSelect.value = '.py';
+         
+         // Afficher le modal
+         this.elements.createDocumentModal.style.display = 'block';
+         
+         // Focus sur le champ de nom
+         setTimeout(() => {
+             this.elements.documentNameInput.focus();
+         }, 100);
+     },
+     
+     /**
+      * Crée un nouveau document
+      */
+     createDocument: function() {
+         const name = this.elements.documentNameInput.value.trim();
+         const type = this.elements.documentTypeSelect.value;
+         const extension = this.elements.documentExtensionSelect.value;
+         
+         // Valider le nom
+         if (!name) {
+             showErrorToast('Le nom du document est obligatoire');
+             return;
+         }
+         
+         // Ajouter l'extension si nécessaire
+         let fileName = name;
+         if (!fileName.endsWith(extension)) {
+             fileName += extension;
+         }
+         
+         // Désactiver le bouton pendant la création
+         this.elements.confirmCreateDocumentBtn.disabled = true;
+         this.elements.confirmCreateDocumentBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+         
+         // Faire la requête API
+         fetch(`/api/projects/${this.state.currentProject}/documents`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ name: fileName, type, content: '' })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la création du document');
+                 }
+                 
+                 // Fermer le modal
+                 this.elements.createDocumentModal.style.display = 'none';
+                 
+                 // Afficher un toast de succès
+                 showToast(`Document "${fileName}" créé avec succès`);
+                 
+                 // Rediriger vers l'éditeur
+                 window.location.href = `/project/${this.state.currentProject}/document/${data.document.path}`;
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la création du document:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+                 
+                 // Réactiver le bouton
+                 this.elements.confirmCreateDocumentBtn.disabled = false;
+                 this.elements.confirmCreateDocumentBtn.innerHTML = '<i class="fas fa-check"></i> Créer le document';
+             });
+     },
+     
+     /**
+      * Affiche le modal d'importation de fichier
+      */
+     showImportFileModal: function() {
+         if (!this.elements.importFileModal) return;
+         
+         // Réinitialiser les champs
+         this.elements.importFilePathInput.value = '';
+         this.elements.importFileTargetInput.value = '';
+         
+         // Afficher le modal
+         this.elements.importFileModal.style.display = 'block';
+     },
+     
+     /**
+      * Ouvre un explorateur de fichiers pour sélectionner un fichier
+      */
+     browseFile: function() {
+         // Simuler un explorateur avec la console
+         this.elements.importFilePathInput.value = '/chemin/vers/fichier.txt';
+         showToast('Cette fonctionnalité utilise la console. Entrez le chemin complet du fichier.');
+     },
+     
+     /**
+      * Importe un fichier dans le projet
+      */
+     importFile: function() {
+         const sourcePath = this.elements.importFilePathInput.value.trim();
+         const targetPath = this.elements.importFileTargetInput.value.trim();
+         
+         // Valider le chemin source
+         if (!sourcePath) {
+             showErrorToast('Le chemin du fichier est obligatoire');
+             return;
+         }
+         
+         // Désactiver le bouton pendant l'importation
+         this.elements.confirmImportFileBtn.disabled = true;
+         this.elements.confirmImportFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importation...';
+         
+         // Créer l'objet de données
+         const data = { source_path: sourcePath };
+         if (targetPath) {
+             data.target_path = targetPath;
+         }
+         
+         // Faire la requête API (en simulant une commande shell)
+         // Note: Dans une implémentation réelle, on utiliserait un endpoint API dédié
+         const command = `python -c "import os, shutil; src='${sourcePath}'; dst='projects/${this.state.currentProject}/${targetPath || os.path.basename(src)}'; os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(src, dst); print('Fichier importé avec succès');"`;
+         
+         fetch('/execute', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ command })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.stderr) {
+                     throw new Error(data.stderr);
+                 }
+                 
+                 // Fermer le modal
+                 this.elements.importFileModal.style.display = 'none';
+                 
+                 // Afficher un toast de succès
+                 showToast('Fichier importé avec succès');
+                 
+                 // Recharger la liste des fichiers
+                 this.loadProjectFiles();
+             })
+             .catch(error => {
+                 console.error('Erreur lors de l\'importation du fichier:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+                 
+                 // Réactiver le bouton
+                 this.elements.confirmImportFileBtn.disabled = false;
+                 this.elements.confirmImportFileBtn.innerHTML = '<i class="fas fa-file-import"></i> Importer';
+             });
+     },
+     
+     /**
+      * Affiche une confirmation de suppression de fichier
+      * @param {string} filePath - Chemin du fichier à supprimer
+      */
+     confirmDeleteFile: function(filePath) {
+         if (!filePath) return;
+         
+         // Configurer le modal de confirmation
+         this.elements.confirmTitle.textContent = 'Supprimer le fichier';
+         this.elements.confirmText.textContent = `Êtes-vous sûr de vouloir supprimer "${filePath}" ? Cette action est irréversible.`;
+         
+         // Configurer le callback
+         this.state.confirmCallback = () => {
+             this.deleteFile(filePath);
+         };
+         
+         // Afficher le modal
+         this.elements.confirmModal.style.display = 'block';
+     },
+     
+     /**
+      * Supprime un fichier
+      * @param {string} filePath - Chemin du fichier à supprimer
+      */
+     deleteFile: function(filePath) {
+         if (!filePath || !this.state.currentProject) return;
+         
+         // Faire la requête API
+         fetch(`/api/projects/${this.state.currentProject}/documents/${filePath}`, {
+             method: 'DELETE'
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la suppression du fichier');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast('Fichier supprimé avec succès');
+                 
+                 // Recharger la liste des fichiers
+                 this.loadProjectFiles();
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la suppression du fichier:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Met à jour la liste des documents dans la section d'analyse
+      * @param {Array} files - Liste des fichiers
+      */
+     updateDocumentList: function(files) {
+         if (!this.elements.analysisDocumentSelect) return;
+         
+         // Vider la liste
+         this.elements.analysisDocumentSelect.innerHTML = '<option value="">Sélectionnez un document...</option>';
+         
+         // Ajouter les documents
+         files.forEach(file => {
+             const option = document.createElement('option');
+             option.value = file.path;
+             option.textContent = file.name;
+             this.elements.analysisDocumentSelect.appendChild(option);
+         });
+     },
+     
+     /**
+      * Met à jour les options d'analyse en fonction du type sélectionné
+      */
+     updateAnalysisOptions: function() {
+         if (!this.elements.analysisTypeSelect || !this.elements.analysisDocumentGroup) return;
+         
+         const analysisType = this.elements.analysisTypeSelect.value;
+         
+         // Afficher/masquer la sélection de document en fonction du type d'analyse
+         if (analysisType === 'document') {
+             this.elements.analysisDocumentGroup.style.display = 'block';
+         } else {
+             this.elements.analysisDocumentGroup.style.display = 'none';
+         }
+     },
+     
+     /**
+      * Exécute une analyse
+      */
+     runAnalysis: function() {
+         if (!this.elements.analysisTypeSelect || !this.elements.analysisModelSelect || !this.elements.analysisResultContainer) return;
+         
+         const analysisType = this.elements.analysisTypeSelect.value;
+         const model = this.elements.analysisModelSelect.value;
+         
+         // Valider le modèle
+         if (model === 'loading' || model === 'none') {
+             showErrorToast('Veuillez sélectionner un modèle');
+             return;
+         }
+         
+         // Si c'est une analyse de document, vérifier qu'un document est sélectionné
+         if (analysisType === 'document') {
+             const documentPath = this.elements.analysisDocumentSelect.value;
+             if (!documentPath) {
+                 showErrorToast('Veuillez sélectionner un document à analyser');
+                 return;
+             }
+             
+             // Lancer l'analyse du document
+             this.analyzeDocument(documentPath, model);
+         } else if (analysisType === 'project') {
+             // Lancer l'analyse du projet
+             this.analyzeProject(model);
+         } else if (analysisType === 'code') {
+             // Lancer l'analyse de la qualité du code
+             this.analyzeCodeQuality(model);
+         }
+     },
+     
+     /**
+      * Analyse un document spécifique
+      * @param {string} documentPath - Chemin du document
+      * @param {string} model - Modèle à utiliser
+      */
+     analyzeDocument: function(documentPath, model) {
+         if (!documentPath || !model || !this.state.currentProject) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.analysisResultContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Analyse en cours...</span>
+             </div>
+         `;
+         
+         // Faire la requête API
+         fetch(`/api/projects/${this.state.currentProject}/documents/${documentPath}/analyze?model=${model}`)
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de l\'analyse');
+                 }
+                 
+                 // Afficher les résultats
+                 this.renderAnalysisResults(data.analysis);
+             })
+             .catch(error => {
+                 console.error('Erreur lors de l\'analyse:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.analysisResultContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors de l'analyse</p>
+                         <p class="small">${error.message}</p>
+                     </div>
+                 `;
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Analyse l'ensemble du projet
+      * @param {string} model - Modèle à utiliser
+      */
+     analyzeProject: function(model) {
+         if (!model || !this.state.currentProject) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.analysisResultContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Analyse du projet en cours...</span>
+                 <p class="small">Cette opération peut prendre plusieurs minutes</p>
+             </div>
+         `;
+         
+         // Simuler une analyse du projet
+         setTimeout(() => {
+             // Note: Dans une implémentation réelle, on utiliserait un endpoint API dédié
+             this.elements.analysisResultContainer.innerHTML = `
+                 <div class="analysis-header">
+                     <h3>Analyse du projet</h3>
+                     <div>Modèle: ${model}</div>
+                 </div>
+                 <div class="analysis-content">
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-chart-bar"></i> Structure du projet
+                         </div>
+                         <p>Le projet contient plusieurs fichiers de différents types. La structure semble bien organisée, mais certains fichiers pourraient être regroupés pour améliorer la cohérence.</p>
+                         <ul>
+                             <li>Nombre de fichiers: XX</li>
+                             <li>Types de fichiers: Python, JavaScript, HTML, CSS</li>
+                             <li>Structure de répertoires: Simple</li>
+                         </ul>
+                     </div>
+                     
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-code"></i> Qualité du code
+                         </div>
+                         <p>Le code présente une qualité globalement bonne, avec quelques points d'amélioration potentiels.</p>
+                         <ul>
+                             <li>Cohérence de style: Bonne</li>
+                             <li>Documentation: Moyenne (peut être améliorée)</li>
+                             <li>Tests: Peu présents</li>
+                         </ul>
+                     </div>
+                     
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-lightbulb"></i> Recommandations
+                         </div>
+                         <ol>
+                             <li>Ajouter plus de documentation, en particulier pour les fonctions complexes</li>
+                             <li>Implémenter des tests unitaires pour les principales fonctionnalités</li>
+                             <li>Considérer une réorganisation des fichiers en modules plus cohérents</li>
+                             <li>Standardiser les conventions de nommage dans tous les fichiers</li>
+                         </ol>
+                     </div>
+                 </div>
+             `;
+         }, 3000);
+     },
+     
+     /**
+      * Analyse la qualité du code du projet
+      * @param {string} model - Modèle à utiliser
+      */
+     analyzeCodeQuality: function(model) {
+         if (!model || !this.state.currentProject) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.analysisResultContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Analyse de la qualité du code en cours...</span>
+                 <p class="small">Cette opération peut prendre plusieurs minutes</p>
+             </div>
+         `;
+         
+         // Simuler une analyse de la qualité du code
+         setTimeout(() => {
+             // Note: Dans une implémentation réelle, on utiliserait un endpoint API dédié
+             this.elements.analysisResultContainer.innerHTML = `
+                 <div class="analysis-header">
+                     <h3>Analyse de la qualité du code</h3>
+                     <div>Modèle: ${model}</div>
+                 </div>
+                 <div class="analysis-content">
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-check-square"></i> Bonnes pratiques
+                         </div>
+                         <p>L'analyse a identifié plusieurs bonnes pratiques dans le code :</p>
+                         <ul>
+                             <li>Utilisation cohérente de l'indentation</li>
+                             <li>Noms de variables descriptifs</li>
+                             <li>Structure de code modulaire</li>
+                         </ul>
+                     </div>
+                     
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-exclamation-triangle"></i> Problèmes potentiels
+                         </div>
+                         <p>Certains problèmes potentiels ont été identifiés :</p>
+                         <ul>
+                             <li>Fonctions trop longues dans certains fichiers</li>
+                             <li>Documentation insuffisante pour certaines parties du code</li>
+                             <li>Duplication de code dans plusieurs fichiers</li>
+                             <li>Variables non utilisées</li>
+                         </ul>
+                     </div>
+                     
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-chart-line"></i> Métriques de code
+                         </div>
+                         <ul>
+                             <li>Complexité cyclomatique moyenne: 4.2 (Bonne)</li>
+                             <li>Ratio de commentaires: 18% (Pourrait être amélioré)</li>
+                             <li>Cohésion des modules: Moyenne à élevée</li>
+                             <li>Couplage: Modéré</li>
+                         </ul>
+                     </div>
+                     
+                     <div class="analysis-section">
+                         <div class="analysis-section-title">
+                             <i class="fas fa-lightbulb"></i> Recommandations
+                         </div>
+                         <ol>
+                             <li>Refactoriser les fonctions de plus de 50 lignes</li>
+                             <li>Ajouter des commentaires de documentation pour toutes les fonctions publiques</li>
+                             <li>Extraire les parties dupliquées en fonctions réutilisables</li>
+                             <li>Supprimer ou utiliser les variables déclarées mais non utilisées</li>
+                             <li>Ajouter des tests unitaires pour les fonctionnalités critiques</li>
+                         </ol>
+                     </div>
+                 </div>
+             `;
+         }, 3000);
+     },
+     
+     /**
+      * Analyse un fichier spécifique (appelé depuis la liste des fichiers)
+      * @param {string} filePath - Chemin du fichier
+      */
+     analyzeFile: function(filePath) {
+         if (!filePath) return;
+         
+         // Basculer vers l'onglet d'analyse
+         this.switchDetailTab('analyze');
+         
+         // Sélectionner le document dans la liste déroulante
+         if (this.elements.analysisDocumentSelect) {
+             this.elements.analysisDocumentSelect.value = filePath;
+         }
+         
+         // Sélectionner le type d'analyse "document"
+         if (this.elements.analysisTypeSelect) {
+             this.elements.analysisTypeSelect.value = 'document';
+             this.updateAnalysisOptions();
+         }
+         
+         // Faire défiler jusqu'au bouton d'analyse
+         if (this.elements.runAnalysisBtn) {
+             this.elements.runAnalysisBtn.scrollIntoView({ behavior: 'smooth' });
+         }
+     },
+     
+     /**
+      * Affiche les résultats d'une analyse
+      * @param {Object} analysis - Résultats de l'analyse
+      */
+     renderAnalysisResults: function(analysis) {
+         if (!this.elements.analysisResultContainer) return;
+         
+         // Formater le texte de l'analyse
+         const formattedAnalysis = this.formatAnalysisText(analysis.analysis);
+         
+         // Construire le HTML
+         this.elements.analysisResultContainer.innerHTML = `
+             <div class="analysis-header">
+                 <h3>Analyse de ${analysis.document.name}</h3>
+                 <div>Modèle: ${analysis.model}</div>
+             </div>
+             <div class="analysis-content">
+                 ${formattedAnalysis}
+             </div>
+         `;
+     },
+     
+     /**
+      * Formate le texte d'une analyse en HTML
+      * @param {string} text - Texte de l'analyse
+      * @returns {string} - HTML formaté
+      */
+     formatAnalysisText: function(text) {
+         if (!text) return '<p>Aucun résultat d\'analyse</p>';
+         
+         // Remplacer les retours à la ligne par des balises <br>
+         let html = text.replace(/\n/g, '<br>');
+         
+         // Mettre en évidence les titres (lignes commençant par des chiffres suivis d'un point)
+         html = html.replace(/(\d+\.\s+[^<]+)/g, '<strong>$1</strong>');
+         
+         // Entourer les blocs de code avec des classes spéciales
+         html = html.replace(/```([^`]+)```/g, '<pre class="code-block">$1</pre>');
+         
+         return html;
+     },
+     
+     /**
+      * Affiche le modal d'importation depuis GitHub
+      */
+     showImportGitHubModal: function() {
+         if (!this.elements.importGitHubModal) return;
+         
+         // Afficher le modal
+         this.elements.importGitHubModal.style.display = 'block';
+         
+         // Vérifier la connexion GitHub
+         this.checkGitHubConnectionForImport();
+     },
+     
+     /**
+      * Vérifie la connexion GitHub pour l'importation
+      */
+     checkGitHubConnectionForImport: function() {
+         // Faire la requête API
+         fetch('/api/github/test-connection')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.success) {
+                     // Connexion réussie, afficher les dépôts
+                     this.elements.githubAuthSection.style.display = 'none';
+                     this.elements.githubReposSection.style.display = 'block';
+                     
+                     // Charger les dépôts
+                     this.loadRepositories();
+                 } else {
+                     // Échec de la connexion, afficher la section d'authentification
+                     this.elements.githubAuthSection.style.display = 'block';
+                     this.elements.githubReposSection.style.display = 'none';
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la vérification de la connexion GitHub:', error);
+                 
+                 // Afficher la section d'authentification
+                 this.elements.githubAuthSection.style.display = 'block';
+                 this.elements.githubReposSection.style.display = 'none';
+             });
+     },
+     
+     /**
+      * Charge la liste des dépôts GitHub
+      */
+     loadRepositories: function() {
+         if (!this.elements.reposListContainer) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.reposListContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Chargement des dépôts...</span>
+             </div>
+         `;
+         
+         // Faire la requête API
+         fetch('/api/github/repositories')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du chargement des dépôts');
+                 }
+                 
+                 // Stocker les dépôts
+                 this.repositories = data.repositories;
+                 
+                 // Afficher les dépôts
+                 this.renderRepositories(data.repositories);
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement des dépôts:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.reposListContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors du chargement des dépôts</p>
+                         <p class="small">${error.message}</p>
+                         <button class="btn" onclick="ProjectManager.loadRepositories()">
+                             <i class="fas fa-sync"></i> Réessayer
+                         </button>
+                     </div>
+                 `;
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast('Erreur lors du chargement des dépôts GitHub');
+             });
+     },
+     
+     /**
+      * Affiche la liste des dépôts GitHub
+      * @param {Array} repositories - Liste des dépôts
+      */
+     renderRepositories: function(repositories) {
+         if (!this.elements.reposListContainer) return;
+         
+         // Si aucun dépôt, afficher un message
+         if (!repositories || repositories.length === 0) {
+             this.elements.reposListContainer.innerHTML = `
+                 <div class="empty-state">
+                     <i class="fab fa-github"></i>
+                     <p>Aucun dépôt trouvé</p>
+                     <p class="small">Créez un dépôt sur GitHub pour l'importer</p>
+                     <a href="https://github.com/new" target="_blank" class="btn github-btn">
+                         <i class="fas fa-plus-circle"></i> Créer un dépôt GitHub
+                     </a>
+                 </div>
+             `;
+             return;
+         }
+         
+         // Construire le HTML
+         let html = '';
+         
+         repositories.forEach(repo => {
+             const updatedDate = new Date(repo.updated_at).toLocaleDateString();
+             
+             html += `
+                 <div class="repo-item" data-repo="${repo.full_name}">
+                     <div class="repo-header">
+                         <div class="repo-name">${repo.name}</div>
+                         <div class="repo-visibility ${repo.private ? 'repo-private' : 'repo-public'}">
+                             ${repo.private ? 'Privé' : 'Public'}
+                         </div>
+                     </div>
+                     <div class="repo-description">${repo.description || 'Aucune description'}</div>
+                     <div class="repo-meta">
+                         <span><i class="fas fa-code-branch"></i> ${repo.default_branch}</span>
+                         <span><i class="fas fa-clock"></i> Mis à jour: ${updatedDate}</span>
+                         ${repo.language ? `<span><i class="fas fa-code"></i> ${repo.language}</span>` : ''}
+                     </div>
+                 </div>
+             `;
+         });
+         
+         // Mettre à jour le conteneur
+         this.elements.reposListContainer.innerHTML = html;
+         
+         // Ajouter des gestionnaires d'événements pour les dépôts
+         document.querySelectorAll('.repo-item').forEach(item => {
+             item.addEventListener('click', () => {
+                 this.cloneRepository(item.dataset.repo);
+             });
+         });
+     },
+     
+     /**
+      * Filtre les dépôts en fonction d'un terme de recherche
+      * @param {string} searchTerm - Terme de recherche
+      */
+     filterRepositories: function(searchTerm) {
+         if (!this.repositories) return;
+         
+         searchTerm = searchTerm.toLowerCase();
+         
+         // Filtrer les dépôts
+         const filteredRepos = this.repositories.filter(repo => {
+             return repo.name.toLowerCase().includes(searchTerm) || 
+                    (repo.description && repo.description.toLowerCase().includes(searchTerm));
+         });
+         
+         // Afficher les dépôts filtrés
+         this.renderRepositories(filteredRepos);
+     },
+     
+     /**
+      * Clone un dépôt GitHub
+      * @param {string} repoFullName - Nom complet du dépôt (owner/repo)
+      */
+     cloneRepository: function(repoFullName) {
+         if (!repoFullName) return;
+         
+         // Fermer le modal
+         this.elements.importGitHubModal.style.display = 'none';
+         
+         // Afficher un toast de chargement
+         showToast('Clonage du dépôt en cours... Cela peut prendre quelques instants.');
+         
+         // Faire la requête API
+         fetch('/api/github/clone', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ repo_full_name: repoFullName })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du clonage du dépôt');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast(`Dépôt ${repoFullName} cloné avec succès`);
+                 
+                 // Rediriger vers la page du projet
+                 window.location.href = `/project/${data.project.id}`;
+             })
+             .catch(error => {
+                 console.error('Erreur lors du clonage du dépôt:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Vérifie la connexion GitHub
+      */
+     checkGitHubConnection: function() {
+         if (!this.elements.githubInfo) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.githubInfo.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Vérification de la connexion GitHub...';
+         
+         // Faire la requête API
+         fetch('/api/github/test-connection')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.success) {
+                     // Connexion réussie
+                     this.elements.githubInfo.innerHTML = `<i class="fab fa-github"></i> Connecté à GitHub: ${data.user.login}`;
+                     this.elements.githubInfo.className = 'github-info connected';
+                 } else {
+                     // Échec de la connexion
+                     this.elements.githubInfo.innerHTML = '<i class="fas fa-unlink"></i> Non connecté à GitHub';
+                     this.elements.githubInfo.className = 'github-info disconnected';
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la vérification de la connexion GitHub:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.githubInfo.innerHTML = '<i class="fas fa-exclamation-circle"></i> Erreur de connexion GitHub';
+                 this.elements.githubInfo.className = 'github-info error';
+             });
+     },
+     
+     /**
+      * Vérifie la connexion GitHub pour la liaison
+      */
+     checkGitHubConnectionForLink: function() {
+         // Faire la requête API
+         fetch('/api/github/test-connection')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (data.success) {
+                     // Connexion réussie, afficher les options de liaison
+                     this.elements.githubLinkAuthSection.style.display = 'none';
+                     this.elements.githubLinkOptionsSection.style.display = 'block';
+                     
+                     // Charger les dépôts pour la liaison
+                     this.loadLinkRepositories();
+                 } else {
+                     // Échec de la connexion, afficher la section d'authentification
+                     this.elements.githubLinkAuthSection.style.display = 'block';
+                     this.elements.githubLinkOptionsSection.style.display = 'none';
+                 }
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la vérification de la connexion GitHub:', error);
+                 
+                 // Afficher la section d'authentification
+                 this.elements.githubLinkAuthSection.style.display = 'block';
+                 this.elements.githubLinkOptionsSection.style.display = 'none';
+             });
+     },
+     
+     /**
+      * Affiche le modal de liaison GitHub
+      */
+     showLinkGitHubModal: function() {
+         if (!this.elements.linkGitHubModal) return;
+         
+         // Afficher le modal
+         this.elements.linkGitHubModal.style.display = 'block';
+         
+         // Vérifier la connexion GitHub
+         this.checkGitHubConnectionForLink();
+     },
+     
+     /**
+      * Bascule entre les options de liaison GitHub
+      */
+     toggleLinkOptions: function() {
+         if (!this.elements.existingRepoSection || !this.elements.newRepoSection) return;
+         
+         if (this.elements.existingRepoOption.checked) {
+             this.elements.existingRepoSection.style.display = 'block';
+             this.elements.newRepoSection.style.display = 'none';
+         } else if (this.elements.newRepoOption.checked) {
+             this.elements.existingRepoSection.style.display = 'none';
+             this.elements.newRepoSection.style.display = 'block';
+         }
+     },
+     
+     /**
+      * Charge la liste des dépôts GitHub pour la liaison
+      */
+     loadLinkRepositories: function() {
+         if (!this.elements.linkReposListContainer) return;
+         
+         // Afficher un indicateur de chargement
+         this.elements.linkReposListContainer.innerHTML = `
+             <div class="loading">
+                 <div class="loading-spinner"></div>
+                 <span>Chargement des dépôts...</span>
+             </div>
+         `;
+         
+         // Faire la requête API
+         fetch('/api/github/repositories')
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors du chargement des dépôts');
+                 }
+                 
+                 // Stocker les dépôts
+                 this.linkRepositories = data.repositories;
+                 
+                 // Afficher les dépôts
+                 this.renderLinkRepositories(data.repositories);
+             })
+             .catch(error => {
+                 console.error('Erreur lors du chargement des dépôts:', error);
+                 
+                 // Afficher l'erreur
+                 this.elements.linkReposListContainer.innerHTML = `
+                     <div class="empty-state">
+                         <i class="fas fa-exclamation-circle"></i>
+                         <p>Erreur lors du chargement des dépôts</p>
+                         <p class="small">${error.message}</p>
+                         <button class="btn" onclick="ProjectManager.loadLinkRepositories()">
+                             <i class="fas fa-sync"></i> Réessayer
+                         </button>
+                     </div>
+                 `;
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast('Erreur lors du chargement des dépôts GitHub');
+             });
+     },
+     
+     /**
+      * Affiche la liste des dépôts GitHub pour la liaison
+      * @param {Array} repositories - Liste des dépôts
+      */
+     renderLinkRepositories: function(repositories) {
+         if (!this.elements.linkReposListContainer) return;
+         
+         // Si aucun dépôt, afficher un message
+         if (!repositories || repositories.length === 0) {
+             this.elements.linkReposListContainer.innerHTML = `
+                 <div class="empty-state">
+                     <i class="fab fa-github"></i>
+                     <p>Aucun dépôt trouvé</p>
+                     <p class="small">Créez un dépôt sur GitHub pour le lier</p>
+                     <a href="https://github.com/new" target="_blank" class="btn github-btn">
+                         <i class="fas fa-plus-circle"></i> Créer un dépôt GitHub
+                     </a>
+                 </div>
+             `;
+             return;
+         }
+         
+         // Construire le HTML
+         let html = '';
+         
+         repositories.forEach(repo => {
+             const updatedDate = new Date(repo.updated_at).toLocaleDateString();
+             
+             html += `
+                 <div class="repo-item" data-repo="${repo.full_name}">
+                     <div class="repo-header">
+                         <div class="repo-name">${repo.name}</div>
+                         <div class="repo-visibility ${repo.private ? 'repo-private' : 'repo-public'}">
+                             ${repo.private ? 'Privé' : 'Public'}
+                         </div>
+                     </div>
+                     <div class="repo-description">${repo.description || 'Aucune description'}</div>
+                     <div class="repo-meta">
+                         <span><i class="fas fa-code-branch"></i> ${repo.default_branch}</span>
+                         <span><i class="fas fa-clock"></i> Mis à jour: ${updatedDate}</span>
+                         ${repo.language ? `<span><i class="fas fa-code"></i> ${repo.language}</span>` : ''}
+                     </div>
+                 </div>
+             `;
+         });
+         
+         // Mettre à jour le conteneur
+         this.elements.linkReposListContainer.innerHTML = html;
+         
+         // Ajouter des gestionnaires d'événements pour les dépôts
+         document.querySelectorAll('.repo-item').forEach(item => {
+             item.addEventListener('click', () => {
+                 this.linkProjectToRepo(item.dataset.repo);
+             });
+         });
+     },
+     
+     /**
+      * Filtre les dépôts pour la liaison en fonction d'un terme de recherche
+      * @param {string} searchTerm - Terme de recherche
+      */
+     filterLinkRepositories: function(searchTerm) {
+         if (!this.linkRepositories) return;
+         
+         searchTerm = searchTerm.toLowerCase();
+         
+         // Filtrer les dépôts
+         const filteredRepos = this.linkRepositories.filter(repo => {
+             return repo.name.toLowerCase().includes(searchTerm) || 
+                    (repo.description && repo.description.toLowerCase().includes(searchTerm));
+         });
+         
+         // Afficher les dépôts filtrés
+         this.renderLinkRepositories(filteredRepos);
+     },
+     
+     /**
+      * Lie le projet à un dépôt GitHub existant
+      * @param {string} repoFullName - Nom complet du dépôt (owner/repo)
+      */
+     linkProjectToRepo: function(repoFullName) {
+         if (!repoFullName || !this.state.currentProject) return;
+         
+         // Fermer le modal
+         this.elements.linkGitHubModal.style.display = 'none';
+         
+         // Afficher un toast de chargement
+         showToast('Liaison avec le dépôt en cours... Cela peut prendre quelques instants.');
+         
+         // Faire la requête API
+         fetch(`/api/github/projects/${this.state.currentProject}/link`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ repo_full_name: repoFullName })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la liaison du projet au dépôt');
+                 }
+                 
+                 // Afficher un toast de succès
+                 showToast(`Projet lié au dépôt ${repoFullName} avec succès`);
+                 
+                 // Recharger la page pour afficher les nouvelles options
+                 window.location.reload();
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la liaison du projet au dépôt:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+             });
+     },
+     
+     /**
+      * Crée un nouveau dépôt GitHub et lie le projet à celui-ci
+      */
+     createAndLinkRepo: function() {
+         if (!this.state.currentProject) return;
+         
+         const name = this.elements.newRepoNameInput.value.trim();
+         const description = this.elements.newRepoDescriptionInput.value.trim();
+         const isPrivate = this.elements.privateRepoCheckbox.checked;
+         
+         // Valider le nom
+         if (!name) {
+             showErrorToast('Le nom du dépôt est obligatoire');
+             return;
+         }
+         
+         // Désactiver le bouton pendant la création
+         this.elements.createAndLinkRepoBtn.disabled = true;
+         this.elements.createAndLinkRepoBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Création...';
+         
+         // Faire la requête API pour créer le dépôt
+         fetch('/api/github/repositories', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ name, description, private: isPrivate })
+         })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la création du dépôt');
+                 }
+                 
+                 // Dépôt créé, maintenant le lier au projet
+                 const repoFullName = data.repository.full_name;
+                 
+                 return fetch(`/api/github/projects/${this.state.currentProject}/link`, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ repo_full_name: repoFullName })
+                 });
+             })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error(`Erreur HTTP: ${response.status}`);
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 if (!data.success) {
+                     throw new Error(data.error || 'Erreur lors de la liaison du projet au dépôt');
+                 }
+                 
+                 // Fermer le modal
+                 this.elements.linkGitHubModal.style.display = 'none';
+                 
+                 // Afficher un toast de succès
+                 showToast('Dépôt créé et lié avec succès');
+                 
+                 // Recharger la page pour afficher les nouvelles options
+                 window.location.reload();
+             })
+             .catch(error => {
+                 console.error('Erreur lors de la création et liaison du dépôt:', error);
+                 
+                 // Afficher un toast d'erreur
+                 showErrorToast(`Erreur: ${error.message}`);
+                 
+                 // Réactiver le bouton
+                 this.elements.createAndLinkRepoBtn.disabled = false;
+                 this.elements.createAndLinkRepoBtn.innerHTML = '<i class="fab fa-github"></i> Créer et lier';
+             });

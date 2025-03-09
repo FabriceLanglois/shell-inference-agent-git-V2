@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Assistant IA - Détail du projet et gestion des documents">
+    <meta name="theme-color" content="#0f172a">
+    <title>Assistant IA - Projet: {{ project.name }}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body data-theme="dark">
+    <header>
+        <div class="header-nav">
+            <a href="/">Console</a>
+            <a href="/ollama">Gestion Ollama</a>
+            <a href="/projects">Projets</a>
+            <a href="/github/settings">GitHub</a>
+        </div>
+        <a href="/projects" class="header-back">
+            <i class="fas fa-chevron-left"></i> Retour aux projets
+        </a>
+        <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
+            <i class="fas fa-moon" aria-hidden="true"></i>
+        </button>
+    </header>
+
+    <div class="container">
+        <div class="project-header">
+            <h1><i class="fas fa-folder-open"></i> {{ project.name }}</h1>
+            
+            <div class="project-meta">
+                <span><i class="fas fa-calendar-alt"></i> Créé le: {{ project.created_at.split("T")[0] }}</span>
+                <span><i class="fas fa-clock"></i> Mis à jour: {{ project.updated_at.split("T")[0] }}</span>
+                {% if project.github_repo %}
+                <span class="github-badge"><i class="fab fa-github"></i> {{ project.github_repo }}</span>
+                {% endif %}
+            </div>
+            
+            <p class="project-description">{{ project.description }}</p>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="btn focus-visible" id="createDocumentBtn">
+                <i class="fas fa-file-plus" aria-hidden="true"></i> Nouveau document
+            </button>
+            <button class="btn focus-visible" id="importFileBtn">
+                <i class="fas fa-file-import" aria-hidden="true"></i> Importer un fichier
+            </button>
+            {% if project.github_repo %}
+            <button class="btn github-btn focus-visible" id="syncGitHubBtn">
+                <i class="fab fa-github" aria-hidden="true"></i> Synchroniser avec GitHub
+            </button>
+            {% else %}
+            <button class="btn github-btn focus-visible" id="linkGitHubBtn">
+                <i class="fab fa-github" aria-hidden="true"></i> Lier à GitHub
+            </button>
+            {% endif %}
+            <button class="btn btn-danger focus-visible" id="deleteProjectBtn">
+                <i class="fas fa-trash" aria-hidden="true"></i> Supprimer ce projet
+            </button>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="files">Fichiers</div>
+            <div class="tab" data-tab="analyze">Analyse IA</div>
+            {% if project.github_repo %}
+            <div class="tab" data-tab="commits">Historique Git</div>
+            {% endif %}
+        </div>
+
+        <!-- Section Fichiers -->
+        <div class="tab-content active" id="files-content">
+            <div class="search-bar">
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="text" id="fileSearchInput" class="form-control" placeholder="Rechercher des fichiers..." aria-label="Rechercher des fichiers">
+                </div>
+                <div class="view-options">
+                    <button class="view-option active" data-view="list" aria-label="Vue liste">
+                        <i class="fas fa-list" aria-hidden="true"></i>
+                    </button>
+                    <button class="view-option" data-view="grid" aria-label="Vue grille">
+                        <i class="fas fa-th" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div id="fileListContainer" class="file-list-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Chargement des fichiers...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section Analyse IA -->
+        <div class="tab-content" id="analyze-content">
+            <div class="analysis-options">
+                <div class="form-group">
+                    <label for="analysisModelSelect">Modèle IA:</label>
+                    <select id="analysisModelSelect" class="form-control" data-model-selector="true">
+                        <option value="loading">Chargement des modèles...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="analysisTypeSelect">Type d'analyse:</label>
+                    <select id="analysisTypeSelect" class="form-control">
+                        <option value="document">Document individuel</option>
+                        <option value="project">Projet complet</option>
+                        <option value="code">Qualité du code</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="analysisDocumentGroup">
+                    <label for="analysisDocumentSelect">Document à analyser:</label>
+                    <select id="analysisDocumentSelect" class="form-control">
+                        <option value="">Sélectionnez un document...</option>
+                    </select>
+                </div>
+                
+                <button class="btn focus-visible" id="runAnalysisBtn">
+                    <i class="fas fa-brain" aria-hidden="true"></i> Lancer l'analyse
+                </button>
+            </div>
+            
+            <div id="analysisResultContainer" class="analysis-result-container">
+                <div class="empty-state">
+                    <i class="fas fa-brain" aria-hidden="true"></i>
+                    <p>Sélectionnez un document et lancez l'analyse</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section Historique Git -->
+        {% if project.github_repo %}
+        <div class="tab-content" id="commits-content">
+            <div class="git-actions">
+                <button class="btn focus-visible" id="pullChangesBtn">
+                    <i class="fas fa-download" aria-hidden="true"></i> Pull
+                </button>
+                <button class="btn focus-visible" id="pushChangesBtn">
+                    <i class="fas fa-upload" aria-hidden="true"></i> Push
+                </button>
+                <div class="branch-info">
+                    <i class="fas fa-code-branch" aria-hidden="true"></i>
+                    <span id="currentBranchDisplay">Chargement...</span>
+                </div>
+            </div>
+            
+            <div id="commitsListContainer" class="commits-list-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Chargement de l'historique...</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Modal de création de document -->
+    <div id="createDocumentModal" class="modal" role="dialog" aria-labelledby="modalDocumentTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeCreateDocumentModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalDocumentTitle">Créer un nouveau document</h2>
+            
+            <div class="form-group">
+                <label for="documentNameInput">Nom du document:</label>
+                <input type="text" id="documentNameInput" class="form-control" placeholder="Nom du document" aria-label="Nom du document">
+            </div>
+            
+            <div class="form-group">
+                <label for="documentTypeSelect">Type de document:</label>
+                <select id="documentTypeSelect" class="form-control">
+                    <option value="code">Code source</option>
+                    <option value="markdown">Markdown</option>
+                    <option value="text">Texte brut</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="documentExtensionSelect">Extension:</label>
+                <select id="documentExtensionSelect" class="form-control">
+                    <option value=".py">.py (Python)</option>
+                    <option value=".js">.js (JavaScript)</option>
+                    <option value=".html">.html (HTML)</option>
+                    <option value=".css">.css (CSS)</option>
+                    <option value=".md">.md (Markdown)</option>
+                    <option value=".txt">.txt (Texte)</option>
+                    <option value=".json">.json (JSON)</option>
+                    <option value=".yml">.yml (YAML)</option>
+                    <option value=".sh">.sh (Shell)</option>
+                    <option value=".java">.java (Java)</option>
+                    <option value=".cpp">.cpp (C++)</option>
+                </select>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="confirmCreateDocumentBtn">
+                    <i class="fas fa-check" aria-hidden="true"></i> Créer le document
+                </button>
+                <button class="btn btn-danger focus-visible" id="cancelCreateDocumentBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal d'importation de fichier -->
+    <div id="importFileModal" class="modal" role="dialog" aria-labelledby="modalImportTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeImportFileModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalImportTitle">Importer un fichier</h2>
+            
+            <div class="form-group">
+                <label for="importFilePathInput">Chemin du fichier:</label>
+                <div class="input-with-button">
+                    <input type="text" id="importFilePathInput" class="form-control" placeholder="/chemin/vers/fichier" aria-label="Chemin du fichier">
+                    <button class="btn" id="browseFileBtn">
+                        <i class="fas fa-file-alt" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="importFileTargetInput">Nom dans le projet (optionnel):</label>
+                <input type="text" id="importFileTargetInput" class="form-control" placeholder="Laisser vide pour conserver le même nom" aria-label="Nom dans le projet">
+            </div>
+            
+            <div class="form-text">
+                <i class="fas fa-info-circle" aria-hidden="true"></i> 
+                Seuls les fichiers texte et code peuvent être importés.
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="confirmImportFileBtn">
+                    <i class="fas fa-file-import" aria-hidden="true"></i> Importer
+                </button>
+                <button class="btn btn-danger focus-visible" id="cancelImportFileBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Annuler
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de synchronisation GitHub -->
+    <div id="syncGitHubModal" class="modal" role="dialog" aria-labelledby="modalSyncTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeSyncGitHubModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalSyncTitle">Synchroniser avec GitHub</h2>
+            
+            {% if project.github_repo %}
+            <div class="form-group">
+                <p>Dépôt GitHub lié: <strong>{{ project.github_repo }}</strong></p>
+            </div>
+            
+            <div class="form-group">
+                <label for="commitMessageInput">Message de commit:</label>
+                <input type="text" id="commitMessageInput" class="form-control" placeholder="Mise à jour depuis Assistant IA" aria-label="Message de commit" value="Mise à jour depuis Assistant IA">
+            </div>
+            
+            <div class="github-actions">
+                <button class="btn focus-visible" id="confirmPullBtn">
+                    <i class="fas fa-download" aria-hidden="true"></i> Pull (récupérer les changements)
+                </button>
+                <button class="btn focus-visible" id="confirmPushBtn">
+                    <i class="fas fa-upload" aria-hidden="true"></i> Push (envoyer les changements)
+                </button>
+            </div>
+            
+            <div class="status-output" id="gitStatusOutput">
+                <div class="status-header">État Git:</div>
+                <div class="status-content" id="gitStatusContent">
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <span>Vérification de l'état...</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle" aria-hidden="true"></i>
+                <div>
+                    Ce projet n'est pas lié à un dépôt GitHub.
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="modal-buttons">
+                <button class="btn btn-danger focus-visible" id="cancelSyncGitHubBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de lien GitHub -->
+    <div id="linkGitHubModal" class="modal" role="dialog" aria-labelledby="modalLinkTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeLinkGitHubModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="modalLinkTitle">Lier à GitHub</h2>
+            
+            <div id="githubLinkAuthSection">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle" aria-hidden="true"></i>
+                    <div>
+                        Vous devez vous connecter à GitHub pour lier ce projet.
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <a href="/github/settings" class="btn github-btn">
+                        <i class="fab fa-github" aria-hidden="true"></i> Configurer GitHub
+                    </a>
+                </div>
+            </div>
+            
+            <div id="githubLinkOptionsSection" style="display: none;">
+                <div class="form-group">
+                    <label>Options de liaison:</label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="existingRepoOption" name="linkOption" value="existing" checked>
+                            <label for="existingRepoOption">Lier à un dépôt existant</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="newRepoOption" name="linkOption" value="new">
+                            <label for="newRepoOption">Créer un nouveau dépôt</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="existingRepoSection">
+                    <div class="form-group">
+                        <label for="linkRepoSearchInput">Rechercher un dépôt:</label>
+                        <input type="text" id="linkRepoSearchInput" class="form-control" placeholder="Nom du dépôt" aria-label="Rechercher un dépôt">
+                    </div>
+                    
+                    <div id="linkReposListContainer" class="repos-list-container">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            <span>Chargement des dépôts...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="newRepoSection" style="display: none;">
+                    <div class="form-group">
+                        <label for="newRepoNameInput">Nom du dépôt:</label>
+                        <input type="text" id="newRepoNameInput" class="form-control" placeholder="Nom du dépôt" aria-label="Nom du dépôt" value="{{ project.name }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="newRepoDescriptionInput">Description (optionnelle):</label>
+                        <textarea id="newRepoDescriptionInput" class="form-control" placeholder="Description du dépôt" aria-label="Description du dépôt">{{ project.description }}</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="checkbox-option">
+                            <input type="checkbox" id="privateRepoCheckbox" name="privateRepo">
+                            <label for="privateRepoCheckbox">Dépôt privé</label>
+                        </div>
+                    </div>
+                    
+                    <button class="btn github-btn focus-visible" id="createAndLinkRepoBtn">
+                        <i class="fab fa-github" aria-hidden="true"></i> Créer et lier
+                    </button>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn btn-danger focus-visible" id="cancelLinkGitHubBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmation -->
+    <div id="confirmModal" class="modal" role="dialog" aria-labelledby="confirmTitle" aria-hidden="true">
+        <div class="modal-content">
+            <span class="close-modal" id="closeConfirmModal" aria-label="Fermer la modal">&times;</span>
+            <h2 class="modal-title" id="confirmTitle">Confirmation</h2>
+            <p class="modal-text" id="confirmText">Êtes-vous sûr de vouloir effectuer cette action?</p>
+            <div class="modal-buttons">
+                <button class="btn focus-visible" id="confirmYesBtn">
+                    <i class="fas fa-check" aria-hidden="true"></i> Oui
+                </button>
+                <button class="btn btn-danger focus-visible" id="confirmNoBtn">
+                    <i class="fas fa-times" aria-hidden="true"></i> Non
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast pour les notifications -->
+    <div id="toast" class="toast" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Scripts -->
+    <script>
+        // Passer l'ID du projet au JavaScript
+        const PROJECT_ID = "{{ project.id }}";
+        const PROJECT_PATH = "{{ project.path }}";
+        const HAS_GITHUB_REPO = {% if project.github_repo %}true{% else %}false{% endif %};
+    </script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/projects.js') }}"></script>
+</body>
+</html>

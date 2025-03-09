@@ -11,6 +11,13 @@ import shlex
 import logging
 import requests
 from datetime import datetime
+from project_manager import ProjectManager
+from github_connector import GitHubConnector
+
+
+# Initialisation des gestionnaires
+project_manager = ProjectManager()
+github_connector = GitHubConnector(projects_dir=project_manager.projects_dir)
 
 # Configuration des logs
 logging.basicConfig(
